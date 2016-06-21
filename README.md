@@ -1,5 +1,13 @@
-# nanojson
-C++ header only json reader-parser
+# nanojson - Simple json reader/writer
+
+:star2: Single C++ header only.
+
+:red_circle: Caution! this library allows:
+- last comma of array: [1,2,3,]
+- last comma of object: { "a":1, "b":2, }
+- non-quoated object-key: { a:1, b:2 }
+- block/line comment: [ /* value of hoge */ 1, ] // <- array of fuga
+  - for the purpose of parsing json-like configuration file with help comment.
 
 # License
 MIT
