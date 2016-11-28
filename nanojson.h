@@ -18,19 +18,20 @@
 #ifndef NANOJSON_H_INCLUDED
 #define NANOJSON_H_INCLUDED
 
+#include <algorithm>
+#include <limits>
 #include <vector>
 #include <map>
+
 #include <string>
+#include <sstream>
+#include <iomanip>
 
 #include <cerrno>
 #include <cinttypes>
 #include <cstdarg>
 #include <cassert>
-
-#include <limits>
-#include <algorithm>
-#include <sstream>
-#include <iomanip>
+#include <cmath>
 
 // remove explicit from element::ctor()
 #ifndef NANOJSON_NOEXPLICIT
@@ -48,7 +49,6 @@
 
 namespace nanojson
 {
-
 	struct nanojson_exception : public std::exception {};
 	struct bad_cast : public nanojson_exception {}; ///< bad-cast
 	struct bad_format : public nanojson_exception {}; ///< bad format json data
@@ -68,7 +68,6 @@ namespace nanojson
 			object,
 		};
 	};
-
 
 	struct element
 	{
@@ -101,7 +100,6 @@ namespace nanojson
 		NANOJSON_EXPLICIT element(const string_t &value) : type(element_type::string), value() { this->value.as_string = value; }
 		NANOJSON_EXPLICIT element(const array_t &value) : type(element_type::array), value() { this->value.as_array = value; }
 		NANOJSON_EXPLICIT element(const object_t &value) : type(element_type::object), value() { this->value.as_object = value; }
-
 
 		element_type::type get_type() const { return type; }
 		bool is_undefined() const { return get_type() == element_type::undefined; }
@@ -138,7 +136,6 @@ namespace nanojson
 		object_t as_object() const { return as_object_ref(); }
 		object_t &as_object_ref() { return const_cast<object_t&>(const_cast<const element&>(*this).as_object_ref()); }
 		const object_t &as_object_ref() const { if (is_object()) { return value.as_object; } NANOJSON_THROW(bad_cast(), value.as_object); }
-
 
 		/// convert to boolean_t
 		boolean_t to_boolean() const
@@ -179,13 +176,7 @@ namespace nanojson
 			return to_json_string();
 		}
 
-		/// export to json data
-		string_t to_json_string(bool one_liner = true, bool no_spaces = false) const
-		{
-			return element_writer::serialize(*this, one_liner, no_spaces, 0);
-		}
-
-		/// cast operators
+		// cast operators
 		operator boolean_t() const { return to_boolean(); }
 		operator integer_t() const { return to_integer(); }
 		operator floating_t() const { return to_floating(); }
@@ -193,7 +184,7 @@ namespace nanojson
 		operator array_t() const { return as_array(); }
 		operator object_t() const { return as_object(); }
 
-		/// compare operators
+		// compare operators
 		bool operator <(const element &b) const { return compare_to(b) < 0; }
 		bool operator >(const element &b) const { return compare_to(b) > 0; }
 		bool operator <=(const element &b) const { return compare_to(b) <= 0; }
@@ -201,7 +192,7 @@ namespace nanojson
 		bool operator ==(const element &b) const { return equals_to(b); }
 		bool operator !=(const element &b) const { return !equals_to(b); }
 
-		/// index operators for array or object
+		// index operator for array
 		const element & operator [] (size_t index) const
 		{
 			if (is_null()) { return undefined(); }
@@ -211,6 +202,7 @@ namespace nanojson
 			return value.as_array.at(index);
 		}
 
+		// index operators for object
 		const element & operator [] (const string_t &key) const
 		{
 			if (is_null()) { return undefined(); }
@@ -225,6 +217,7 @@ namespace nanojson
 			return operator[](string_t(pKey));
 		}
 
+		/// get size of array or object
 		size_t size() const
 		{
 			if (is_undefined()) { return 0; }
@@ -250,22 +243,20 @@ namespace nanojson
 			return undef;
 		}
 
-		static element from_string(const string_t &src)
+		/// export to json string
+		string_t to_json_string(bool one_liner = true, bool no_spaces = false) const
 		{
-			return from_iterator(src.cbegin(), src.cend());
+			return element_writer::serialize(*this, one_liner, no_spaces, 0);
 		}
 
-		static element from_string(const char_t *src)
-		{
-			return from_iterator(src, src + std::char_traits<char_t>::length(src));
-		}
-
+		/// import from json-form string istream
 		template <class T>
 		static element from_stream(T &istream)
 		{
 			return element_reader<T>::parse(istream);
 		}
 
+		/// import from json-form string iterator
 		template <class T>
 		static element from_iterator(T first, T last)
 		{
@@ -273,12 +264,25 @@ namespace nanojson
 			{
 				const T first, last;
 				T cur;
-				reader(T first, T last) : first(first), cur(first), last(last) { }
+				reader(T first, T last) : first(first), last(last), cur(first) { }
 				int get() { return cur != last ? (int)*cur++ : EOF; }
 				void unget() { if (cur != first) { cur--; } }
-			};
-			return element_reader<reader>::parse(reader(first, last));
+			} reader_obj(first, last);
+			return from_stream(reader_obj);
 		}
+
+		/// import from json-form string
+		static element from_string(const string_t &src)
+		{
+			return from_iterator(src.cbegin(), src.cend());
+		}
+
+		/// import from json-form string
+		static element from_string(const char_t *src)
+		{
+			return from_iterator(src, src + std::char_traits<char_t>::length(src));
+		}
+
 
 	private:
 		template <class T>
@@ -330,7 +334,6 @@ namespace nanojson
 		class element_writer
 		{
 		public:
-
 			static string_t serialize(const element &val, bool oneline, bool no_space, int indent = 0)
 			{
 				return to_string(val, oneline, no_space, indent);
@@ -419,7 +422,7 @@ namespace nanojson
 			static string_t encode_string(const string_t &src)
 			{
 				string_t encoded;
-				for (size_t i = 0; i < src.size();i++)
+				for (size_t i = 0; i < src.size(); i++)
 				{
 					switch (src[i])
 					{
@@ -435,7 +438,7 @@ namespace nanojson
 						{
 							const size_t bufsz = 8;
 							char_t buf[bufsz] = {};
-							snprintf(buf, bufsz, "\\u%04X", static_cast<int>(src[i]) & 0xFF);
+							snprintf<char_t, void>::exec(buf, bufsz, "\\u%04X", static_cast<int>(src[i]) & 0xFF);
 							encoded += buf;
 						}
 						else
@@ -447,17 +450,17 @@ namespace nanojson
 				return encoded;
 			}
 
-			template <class TChar>
-			static void snprintf(TChar *buffer, size_t bufferCount, char *format, ...);
-
-			template <>
-			static void snprintf<char>(char *buffer, size_t bufferCount, char *format, ...)
+			template <class T, class U = void> struct snprintf; // U is dummy.
+			template <class U> struct snprintf<char_t, U> // U is dummy
 			{
-				va_list ap;
-				va_start(ap, format);
-				std::vsnprintf(buffer, bufferCount, format, ap);
-				va_end(ap);
-			}
+				static void exec(char *buffer, size_t bufferCount, const char *format, ...)
+				{
+					va_list ap;
+					va_start(ap, format);
+					std::vsnprintf(buffer, bufferCount, format, ap);
+					va_end(ap);
+				}
+			};
 		};
 
 	private:
@@ -472,7 +475,6 @@ namespace nanojson
 			}
 
 		private:
-			element result;
 			istream &src;
 			unsigned char c;
 			bool eof;
@@ -483,8 +485,9 @@ namespace nanojson
 				return this->c = c;
 			}
 
-			element_reader(istream &src)
+			explicit element_reader(istream &src)
 				: src(src)
+				, c(0)
 				, eof(false)
 			{
 			}
@@ -641,7 +644,7 @@ namespace nanojson
 						case 'r': ret += '\r'; break;
 						case '\\': ret += '\\'; break;
 						case '"': ret += '"'; break;
-						case 'u':
+						case 'u': // generate utf-8 sequence
 						{
 							int code = 0;
 							next(); code = code << 4 | hex(c);
@@ -649,9 +652,21 @@ namespace nanojson
 							next(); code = code << 4 | hex(c);
 							next(); code = code << 4 | hex(c);
 							if (code < 0) { NANOJSON_THROW(bad_format(), undefined()); }
-							else if (code <= 0x7F) { ret += (char)code; }
-							else if (code <= 0x07FF) { ret += (char)(code >> 6 & 0x1f | 0xC0); ret += (char)(code & 0x3f | 0x80); }
-							else if (code <= 0xFFFF) { ret += (char)(code >> 11 & 0x0f | 0xE0); ret += (char)(code >> 6 & 0x3f | 0x80); ret += (char)(code & 0x3f | 0x80); }
+							else if (code <= 0x7F)
+							{
+								ret += static_cast<char>(code);
+							}
+							else if (code <= 0x07FF)
+							{
+								ret += static_cast<char>((code >> 6 & 0x1f) | 0xC0);
+								ret += static_cast<char>((code & 0x3f) | 0x80);
+							}
+							else if (code <= 0xFFFF)
+							{
+								ret += static_cast<char>((code >> 11 & 0x0f) | 0xE0);
+								ret += static_cast<char>((code >> 6 & 0x3f) | 0x80);
+								ret += static_cast<char>((code & 0x3f) | 0x80);
+							}
 							else { NANOJSON_THROW(bad_format(), undefined()); }
 							break;
 						}
