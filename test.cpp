@@ -40,6 +40,10 @@ int main()
 	if (e[1]["f"].is_defined()) { std::cout << "e[1][\"f\"] = " << e[1]["f"].to_string() << std::endl; }
 	if (e[1]["x"].is_defined()) { std::cout << "e[1][\"x\"] = " << e[1]["x"].to_string() << std::endl; }
 	
+	std::cout << "e.size() = " << e.size() << std::endl;
+	if (e[1].is_defined()) { std::cout << "e[1].size() = " << e[1].size() << std::endl; } 
+	if (e[1]["a"].is_defined()) { std::cout << "e[1][\"a\"].size() = " << e[1]["a"].size() << std::endl; } 
+
 	std::cout << "input test json:" << std::endl;
 	try {
 		std::cin >> e;

@@ -217,11 +217,12 @@ namespace nanojson
 			return operator[](string_t(pKey));
 		}
 
-		/// get size of array or object
+		/// get size of string, array or object
 		size_t size() const
 		{
 			if (is_undefined()) { return 0; }
 			if (is_null()) { return 0; }
+			if (is_string()) { return value.as_string.size(); }
 			if (is_array()) { return value.as_array.size(); }
 			if (is_object()) { return value.as_object.size(); }
 			NANOJSON_THROW(bad_operation(), 0);
