@@ -1,7 +1,7 @@
 /**
 * nanojson - simple json library
 *
-* Copyright (c) 2016 tu-sa
+* Copyright (c) 2016-2022 ttsuki
 *
 * This software is released under the MIT License.
 * http://opensource.org/licenses/mit-license.php
@@ -433,6 +433,7 @@ namespace nanojson
 					case '\f': encoded += "\\f"; break;
 					case '\r': encoded += "\\r"; break;
 					case '\\': encoded += "\\\\"; break;
+					case '/': encoded += "\\/"; break;
 					case '"': encoded += "\\\""; break;
 					default:
 						if ((src[i] & 0xFF) < 0x20)
@@ -644,6 +645,7 @@ namespace nanojson
 						case 'f': ret += '\f'; break;
 						case 'r': ret += '\r'; break;
 						case '\\': ret += '\\'; break;
+						case '/': ret += '/'; break;
 						case '"': ret += '"'; break;
 						case 'u': // generate utf-8 sequence
 						{
@@ -662,9 +664,31 @@ namespace nanojson
 								ret += static_cast<char>((code >> 6 & 0x1f) | 0xC0);
 								ret += static_cast<char>((code & 0x3f) | 0x80);
 							}
+							else if ((code & 0xF800) == 0xD800) // surrogate pair
+							{
+								// assume next surrogate is following.
+								next(); if (c != '\\') { NANOJSON_THROW(bad_format(), undefined()); } // invalid string format: expected surrogate pair
+								next(); if (c != 'u') { NANOJSON_THROW(bad_format(), undefined()); } // invalid string format: expected surrogate pair
+
+								int code2 = 0;
+								next(); code2 = code2 << 4 | hex(c);
+								next(); code2 = code2 << 4 | hex(c);
+								next(); code2 = code2 << 4 | hex(c);
+								next(); code2 = code2 << 4 | hex(c);
+
+								if ((code & 0xFC00) == 0xDC00 && (code2 & 0xFC00) == 0xD800) { std::swap(code, code2); }
+
+								if ((code & 0xFC00) == 0xD800 && (code2 & 0xFC00) == 0xDC00) { code = ((code & 0x3FF) << 10 | (code2 & 0x3FF)) + 0x10000; }
+								else { NANOJSON_THROW(bad_format(), undefined()); } // invalid string format: invalid surrogate pair sequence
+
+								ret += static_cast<char>((code >> 18 & 0x07) | 0xF0);
+								ret += static_cast<char>((code >> 12 & 0x3f) | 0x80);
+								ret += static_cast<char>((code >> 6 & 0x3f) | 0x80);
+								ret += static_cast<char>((code >> 0 & 0x3f) | 0x80);
+							}
 							else if (code <= 0xFFFF)
 							{
-								ret += static_cast<char>((code >> 11 & 0x0f) | 0xE0);
+								ret += static_cast<char>((code >> 12 & 0x0f) | 0xE0);
 								ret += static_cast<char>((code >> 6 & 0x3f) | 0x80);
 								ret += static_cast<char>((code & 0x3f) | 0x80);
 							}

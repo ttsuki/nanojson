@@ -1,7 +1,7 @@
 /**
 * nanojson test code
 *
-* Copyright (c) 2016 tu-sa
+* Copyright (c) 2016-2022 ttsuki
 *
 * This software is released under the MIT License.
 * http://opensource.org/licenses/mit-license.php
@@ -10,23 +10,31 @@
 #include "nanojson.h"
 #include <iostream>
 
+#ifdef _WIN32
+#include <Windows.h>
+#endif
+
 int main()
 {
+#ifdef _WIN32
+	SetConsoleOutputCP(CP_UTF8); // set codepage to utf-8.
+#endif
+
 	#define LF "\n"
 	std::stringstream ss = std::stringstream(std::string(
-		"[123, {"                                    LF
-		"a : \"あいう\\\\n\\tえお\", "                 LF
-		"  \t b : true, "                            LF
-		"     c : null, "                            LF
-		" /* start comment ..."                      LF
-		"     x : here is in block comment"          LF
-		"                  ... end comment */"       LF
-		"\"d\\u0001\" : false, "                     LF
-		"   // e is a test integer."                 LF
-		"   // f is a test floating."                LF
-		"e : 1234567890123456789, "                  LF
-		"f : -123.4567e+89, "	                     LF
-		"}  ]"));
+		u8"[123, {"                                    LF
+		u8"a : \"$£ह€한𐍈\\u0024\\u00A3\\u0939\\u20AC\\uD55C\\uD800\\uDF48\\uD83D\\uDE03\", "                 LF
+		u8"  \t b : true, "                            LF
+		u8"     c : null, "                            LF
+		u8" /* start comment ..."                      LF
+		u8"     x : here is in block comment"          LF
+		u8"                  ... end comment */"       LF
+		u8"\"d\\u0001\" : false, "                     LF
+		u8"   // e is a test integer."                 LF
+		u8"   // f is a test floating."                LF
+		u8"e : 1234567890123456789, "                  LF
+		u8"f : -123.4567e+89, "	                     LF
+		u8"}  ]"));
 
 	std::cout << "input json: " << std::endl;
 	std::cout << ss.str() << std::endl;
