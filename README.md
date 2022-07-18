@@ -54,7 +54,7 @@ class json_t
 
 😃 Here, some snippets may be useful to learn usage of this library.
 
-[nanojson2.test.cpp](nanojson2.test.cpp)
+[nanojson2.samples.cpp](nanojson2.samples.cpp)
 
 ### 🌟 Simple iostream/string i/o interface.
 
