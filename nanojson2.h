@@ -1106,10 +1106,8 @@ namespace nanojson2
 
                 if (std::isinf(v))
                 {
-                    // clamp infinity into [max,min]
-                    v = v > 0
-                            ? std::numeric_limits<json_t::floating_t>::max()
-                            : std::numeric_limits<json_t::floating_t>::lowest();
+                    out << (v > 0 ? "1.0e999999999" : "-1.0e999999999");
+                    return;
                 }
 
 
