@@ -656,7 +656,7 @@ namespace nanojson2
 
             char_t buffer[128]{};
             char_t* p = buffer;
-            char_t* const integer_limit = buffer + 32;
+            char_t* const integer_limit = buffer + 48;
             char_t* const fraction_limit = buffer + 64;
             char_t* const decimal_limit = buffer + 128;
 
