@@ -45,7 +45,7 @@
 #endif
 
 #if !(defined(__cpp_lib_to_chars) && __cpp_lib_to_chars >= 201611L)
-#error "nanojson needs C++17 Elementary string conversions (P0067R5) including Floating-Point (FP) values support.  See https://en.cppreference.com/w/cpp/compiler_support/17#:~:text=Elementary%20string%20conversions"
+#pragma message("nanojson needs C++17 Elementary string conversions (P0067R5) including Floating-Point (FP) values support. See (https://en.cppreference.com/w/cpp/compiler_support/17#:~:text=Elementary%20string%20conversions) This time, falling back to an implementation with stringstream instead.")
 #endif
 
 namespace nanojson2
@@ -778,10 +778,22 @@ namespace nanojson2
                 if (ec == std::errc{} && ptr == p) return ret; // integer OK
             }
 
-            // try to parse as floating type
+            // try to parse as floating type (should succeed)
             {
                 json_t::floating_t ret{};
+#if (defined(__cpp_lib_to_chars) && __cpp_lib_to_chars >= 201611L) // compiler has floating-point from_chars
                 auto [ptr, ec] = std::from_chars(buffer, p, ret);
+#else // use fallback implementation
+                std::istringstream tmp{std::string(buffer, p)};
+                tmp.imbue(std::locale::classic());
+                tmp >> ret;
+                std::errc ec = !tmp ? std::errc::result_out_of_range : std::errc{}; // if fails, assume it must be out of range.
+                const char* ptr = !tmp ? p : tmp.eof() ? p : buffer + tmp.tellg();
+#endif
+
+                assert(ec == std::errc{} || ec == std::errc::result_out_of_range);
+                assert(ptr == p);
+
                 if (ptr == p)
                 {
                     if (ec == std::errc{}) return ret; // floating OK
@@ -793,6 +805,7 @@ namespace nanojson2
                 }
             }
 
+            assert(false);
             throw bad_format("invalid number format: failed to parse");
         }
 
@@ -1123,9 +1136,19 @@ namespace nanojson2
                     if (mode == std::ios_base::scientific) format = std::chars_format::scientific;
                 }
 
+#if (defined(__cpp_lib_to_chars) && __cpp_lib_to_chars >= 201611L) // compiler has floating-point to_chars
                 json_t::char_t v_str[128]{};
                 auto [ptr, ec] = std::to_chars(std::begin(v_str), std::end(v_str), v, format, precision);
                 if (ec != std::errc{} || *ptr != '\0') throw bad_value("failed to to_chars(floating)");
+#else // use fallback implementation
+                std::ostringstream tmp{};
+                tmp.imbue(std::locale::classic());
+                if (format == std::chars_format::fixed) tmp << std::fixed;
+                if (format == std::chars_format::scientific) tmp << std::scientific;
+                tmp << std::setprecision(precision);
+                tmp << v;
+                auto v_str = tmp.str();
+#endif
 
                 out << v_str;
             }
