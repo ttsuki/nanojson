@@ -50,30 +50,33 @@
 
 namespace nanojson2
 {
-    /// nanojson_exception: is base class of nanojson exceptions
-    struct nanojson_exception : std::runtime_error
+    inline namespace exceptions
     {
-        using std::runtime_error::runtime_error;
-    };
+        /// nanojson_exception: is base class of nanojson exceptions
+        struct nanojson_exception : std::runtime_error
+        {
+            using std::runtime_error::runtime_error;
+        };
 
-    /// bad_access: represents invalid node access
-    struct bad_access final : nanojson_exception
-    {
-        explicit bad_access() : nanojson_exception("bad_access") { }
-        using nanojson_exception::nanojson_exception;
-    };
+        /// bad_access: represents invalid node access
+        struct bad_access final : nanojson_exception
+        {
+            explicit bad_access() : nanojson_exception("bad_access") { }
+            using nanojson_exception::nanojson_exception;
+        };
 
-    /// bad_format: represents FAILED to decode from json string.
-    struct bad_format : nanojson_exception
-    {
-        using nanojson_exception::nanojson_exception;
-    };
+        /// bad_format: represents FAILED to decode from json string.
+        struct bad_format : nanojson_exception
+        {
+            using nanojson_exception::nanojson_exception;
+        };
 
-    /// bad_value: represents FAILED to encode to json string.
-    struct bad_value : nanojson_exception
-    {
-        using nanojson_exception::nanojson_exception;
-    };
+        /// bad_value: represents FAILED to encode to json string.
+        struct bad_value : nanojson_exception
+        {
+            using nanojson_exception::nanojson_exception;
+        };
+    }
 
     /// json_t: represents a json element
     class json_t final
