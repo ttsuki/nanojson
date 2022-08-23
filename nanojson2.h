@@ -75,23 +75,13 @@ namespace nanojson2
         using nanojson_exception::nanojson_exception;
     };
 
-    /// undefined_t: represents undefined.
-    struct undefined_t
-    {
-        struct undefined_tag { };
-
-        constexpr explicit undefined_t(undefined_tag) noexcept { }
-        constexpr bool operator ==(undefined_t) const noexcept { return true; }
-        constexpr bool operator !=(undefined_t) const noexcept { return false; }
-    };
-
     /// json_t: represents a json element
     class json_t final
     {
     public:
         using char_t = char;
 
-        using undefined_t = nanojson2::undefined_t;
+        using undefined_t = std::monostate;
         using null_t = std::nullptr_t;
         using bool_t = bool;
         using integer_t = long long int;
@@ -125,7 +115,7 @@ namespace nanojson2
         private:
             friend class json_t;
 
-            static inline constexpr undefined_t value_of_undefined = undefined_t{undefined_t::undefined_tag{}};
+            static inline constexpr undefined_t value_of_undefined = undefined_t{};
             static inline constexpr null_t value_of_null = null_t{};
 
             std::variant<
@@ -1430,6 +1420,7 @@ namespace nanojson2
 
     // type exports
 
+    using undefined_t = json_t::undefined_t;
     using null_t = json_t::null_t;
     using integer_t = json_t::integer_t;
     using floating_t = json_t::floating_t;
