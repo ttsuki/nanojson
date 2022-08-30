@@ -1101,6 +1101,318 @@ namespace nanojson2
         }
     }
 
+    namespace json_stringifier
+    {
+        struct format_options
+        {
+            std::chars_format floating_format = std::chars_format::general;
+            int floating_precision = 7;
+
+            [[nodiscard]] static format_options from_stream(std::ios_base& stream)
+            {
+                format_options r{};
+                const auto mode = stream.flags() & std::ios_base::floatfield;
+                if (mode == std::ios_base::fixed) r.floating_format = std::chars_format::fixed;
+                if (mode == std::ios_base::scientific) r.floating_format = std::chars_format::scientific;
+                r.floating_precision = std::clamp(static_cast<int>(stream.precision()), 0, 64);
+                return r;
+            }
+        };
+
+        template <class character_output_iterator>
+        class stringifier
+        {
+        public:
+            static void write_json(
+                character_output_iterator destination,
+                const json_t& source,
+                format_options options,
+                bool pretty,
+                bool dump_type_as_comment = false)
+            {
+                stringifier(destination, options, pretty, dump_type_as_comment).write_json(source);
+            }
+
+        private:
+            struct output_stream
+            {
+                character_output_iterator it_;
+                explicit output_stream(character_output_iterator it) : it_(std::move(it)) {}
+                output_stream& operator <<(char c) { return *it_++ = c, *this; }
+                output_stream& operator <<(std::string_view view) { return std::copy(view.begin(), view.end(), it_), *this; }
+            } output_;
+
+            const format_options options_;
+            const bool pretty_;
+            const bool dump_type_;
+            std::basic_string<json_t::char_t> indent_stack_;
+
+        public:
+            stringifier(character_output_iterator& out, format_options options, bool pretty, bool dump_type)
+                : output_(out)
+                , options_(options)
+                , pretty_(pretty)
+                , dump_type_(dump_type) {}
+
+        private:
+            void write_string(const json_t::string_view_t val)
+            {
+                using namespace std::string_view_literals;
+
+                output_ << '"';
+                for (auto c : val)
+                {
+                    static constexpr std::array<json_t::string_view_t, 256> char_table_
+                    {
+                        /* 00 */"\\u0000", "\\u0001", "\\u0002", "\\u0003", "\\u0004", "\\u0005", "\\u0006", "\\u0007", "\\b", "\\t", "\\n", "\\u000B", "\\u000C", "\\r", "\\u000E", "\\u000F",
+                        /* 10 */"\\u0010", "\\u0011", "\\f", "\\u0013", "\\u0014", "\\u0015", "\\u0016", "\\u0017", "\\u0018", "\\u0019", "\\u001A", "\\u001B", "\\u001C", "\\u001D", "\\u001E", "\\u001F",
+                        /* 20 */ {}, {}, "\\\"", {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, "\\/",
+                        /* 30 */ {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
+                        /* 40 */ {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
+                        /* 50 */ {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, "\\\\", {}, {}, {},
+                        /* 60 */ {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
+                        /* 70 */ {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, "\\u007F",
+                    };
+
+                    if (auto p = char_table_[static_cast<uint8_t>(c)]; !p.empty())
+                        output_ << p;
+                    else
+                        output_ << c;
+                }
+                output_ << '"';
+            }
+
+            template <size_t N, class integer, std::enable_if_t<std::is_integral_v<integer>>* = nullptr>
+            static std::string_view integer_to_chars(char (&buf)[N], integer i)
+            {
+                auto [ptr, ec] = std::to_chars(std::begin(buf), std::end(buf), i, 10);
+                if (ec != std::errc{}) throw bad_value("failed to to_chars(integer)");
+                return std::string_view(buf, ptr - buf);
+            }
+
+            void write_json(const json_t& value)
+            {
+                switch (value.value().get_type())
+                {
+                case json_type_index::undefined_t: return write_element(json_t::undefined_t{});
+                case json_type_index::null_t: return write_element(*value.value().as_null());
+                case json_type_index::bool_t: return write_element(*value.value().as_bool());
+                case json_type_index::integer_t: return write_element(*value.value().as_integer());
+                case json_type_index::floating_t: return write_element(*value.value().as_floating());
+                case json_type_index::string_t: return write_element(*value.value().as_string());
+                case json_type_index::array_t: return write_element(*value.value().as_array());
+                case json_type_index::object_t: return write_element(*value.value().as_object());
+                default: return;
+                }
+            }
+
+            void write_element(const json_t::undefined_t)
+            {
+                using namespace std::string_view_literals;
+                if (dump_type_) output_ << "/***  UNDEFINED  ***/ undefined /* not allowed */"sv;
+                else throw bad_value("undefined is not allowed");
+            }
+
+            void write_element(const json_t::null_t)
+            {
+                using namespace std::string_view_literals;
+                if (dump_type_) output_ << "/***  NULL  ***/ ";
+                output_ << "null"sv;
+            }
+
+            void write_element(const json_t::bool_t v)
+            {
+                using namespace std::string_view_literals;
+                if (dump_type_) output_ << "/***  BOOLEAN  ***/ "sv;
+                output_ << (v ? "true"sv : "false"sv);
+            }
+
+            void write_element(const json_t::integer_t v)
+            {
+                using namespace std::string_view_literals;
+                if (dump_type_) output_ << "/***  INTEGER  ***/ "sv;
+                char buf[32];
+                output_ << integer_to_chars(buf, v);
+            }
+
+            void write_element(const json_t::floating_t v)
+            {
+                using namespace std::string_view_literals;
+                if (dump_type_) output_ << "/***  FLOATING  ***/ "sv;
+
+                if (std::isnan(v))
+                {
+                    if (dump_type_) output_ << "NaN /* not allowed */"sv;
+                    else throw bad_value("NaN is not allowed");
+                }
+                else if (std::isinf(v))
+                {
+                    output_ << (v > 0 ? "1.0e999999999"sv : "-1.0e999999999"sv);
+                    return;
+                }
+                else
+                {
+                    std::chars_format format = std::chars_format::general;
+                    const auto precision = std::clamp(options_.floating_precision, 0, 64);
+                    const auto overflow_limit = std::pow(static_cast<json_t::floating_t>(10), precision);
+                    const auto underflow_limit = std::pow(static_cast<json_t::floating_t>(10), precision);
+
+                    if (const auto abs = std::abs(v);
+                        abs < overflow_limit && abs > underflow_limit)
+                        format = options_.floating_format;
+
+#if (defined(__cpp_lib_to_chars) && __cpp_lib_to_chars >= 201611L) // compiler has floating-point to_chars
+                    char s[128]{};
+                    auto [ptr, ec] = std::to_chars(std::begin(s), std::end(s), v, format, precision);
+                    if (ec != std::errc{} || *ptr != '\0') throw bad_value("failed to to_chars(floating)");
+                    output_ << json_t::string_view_t(s, ptr - s);
+#else // use fallback implementation
+                    std::ostringstream s{};
+                    s.imbue(std::locale::classic());
+                    if (format == std::chars_format::fixed) s << std::fixed;
+                    if (format == std::chars_format::scientific) s << std::scientific;
+                    s << std::setprecision(precision);
+                    s << v;
+                    out_ << s.str();
+#endif
+                }
+            }
+
+            void write_element(const json_t::string_t& val)
+            {
+                using namespace std::string_view_literals;
+                if (dump_type_)
+                {
+                    char buf[32];
+                    output_ << "/***  STRING["sv << integer_to_chars(buf, val.size()) << "]  ***/ "sv;
+                }
+
+                write_string(val);
+            }
+
+            void write_element(const json_t::array_t& val)
+            {
+                using namespace std::string_view_literals;
+                if (dump_type_)
+                {
+                    char buf[32];
+                    output_ << "/***  ARRAY["sv << integer_to_chars(buf, val.size()) << "]  ***/ "sv;
+                }
+
+                if (!val.empty())
+                {
+                    output_ << '[';
+                    if (pretty_) output_ << "\n"sv;
+                    indent_stack_.push_back(' ');
+                    indent_stack_.push_back(' ');
+                    for (auto it = val.begin(); it != val.end(); ++it)
+                    {
+                        if (it != val.begin())
+                        {
+                            output_ << ',';
+                            if (pretty_) output_ << '\n';
+                        }
+                        if (pretty_) output_ << indent_stack_;
+                        write_json(*it);
+                    }
+                    indent_stack_.pop_back();
+                    indent_stack_.pop_back();
+                    if (pretty_) output_ << '\n' << indent_stack_;
+                    output_ << ']';
+                }
+                else
+                {
+                    output_ << "[]"sv;
+                }
+            }
+
+            void write_element(const json_t::object_t& val)
+            {
+                using namespace std::string_view_literals;
+                if (dump_type_)
+                {
+                    char buf[32];
+                    output_ << "/***  OBJECT["sv << integer_to_chars(buf, val.size()) << "]  ***/ "sv;
+                }
+
+                if (!val.empty())
+                {
+                    output_ << '{';
+                    if (pretty_) output_ << '\n';
+
+                    indent_stack_.push_back(' ');
+                    indent_stack_.push_back(' ');
+                    for (auto it = val.begin(); it != val.end(); ++it)
+                    {
+                        if (it != val.begin())
+                        {
+                            output_ << ',';
+                            if (pretty_) output_ << '\n';
+                        }
+                        if (pretty_) output_ << indent_stack_;
+                        write_string(it->first);
+                        output_ << ':';
+                        if (pretty_) output_ << ' ';
+                        write_json(it->second);
+                    }
+                    indent_stack_.pop_back();
+                    indent_stack_.pop_back();
+                    if (pretty_) output_ << '\n' << indent_stack_;
+                    output_ << '}';
+                }
+                else
+                {
+                    output_ << "{}"sv;
+                }
+            }
+        };
+
+        /// to output iterator
+        template <
+            class character_output_iterator,
+            std::void_t<decltype(*std::declval<character_output_iterator>() = json_t::char_t{})>* = nullptr>
+        void write_json(
+            character_output_iterator destination,
+            const json_t& json,
+            format_options options,
+            bool pretty = false,
+            bool dump_type_as_comment = false)
+        {
+            stringifier<character_output_iterator>::write_json(destination, json, options, pretty, dump_type_as_comment);
+        }
+
+        /// to ostream with format_options by current stream flags
+        template <
+            class ostream,
+            std::enable_if_t<std::is_constructible_v<std::ostreambuf_iterator<char>, ostream&>>* = nullptr>
+        void write_json(
+            ostream& destination,
+            const json_t& json,
+            format_options options,
+            bool pretty = false,
+            bool dump_type_as_comment = false)
+        {
+            write_json(std::ostreambuf_iterator{destination}, json, options, pretty, dump_type_as_comment);
+        }
+
+        /// to ostream with format_options by current stream flags
+        template <
+            class ostream,
+            std::enable_if_t<std::is_constructible_v<std::ostreambuf_iterator<char>, ostream&>>* = nullptr>
+        void write_json(
+            ostream& destination,
+            const json_t& json,
+            bool pretty = false,
+            bool dump_type_as_comment = false)
+        {
+            format_options options{};
+            if constexpr (std::is_convertible_v<ostream&, std::ios_base&>)
+                options = format_options::from_stream(destination);
+
+            write_json(std::ostreambuf_iterator{destination}, json, options, pretty, dump_type_as_comment);
+        }
+    }
+
     /// json_reader
     class json_t::json_reader
     {
@@ -1124,211 +1436,18 @@ namespace nanojson2
     class json_t::json_writer
     {
     public:
-        using json_ostream = json_t::json_ostream;
-
         // To stream
         static void write_json(json_ostream& destination, const json_t& val, bool pretty = false, bool debug_dump = false)
         {
-            std::basic_string<json_t::char_t> indent_stack;
-            write_element(destination, val, pretty || debug_dump, indent_stack, debug_dump);
+            json_stringifier::write_json(destination, val, pretty, debug_dump);
         }
 
         // To string
-        static json_t::json_string_t to_json_string(const json_t& val, bool pretty = false, bool debug_dump = false)
+        static json_string_t to_json_string(const json_t& json, bool pretty = false, bool debug_dump = false)
         {
-            std::basic_ostringstream<json_t::char_t> oss;
-            write_json(oss, val, pretty, debug_dump);
-            return oss.str();
-        }
-
-    private:
-        static void write_element(json_ostream& out, const json_t& value, bool pretty, std::basic_string<json_t::char_t>& indent_stack, bool debug_dump)
-        {
-            if (value->is_undefined())
-            {
-                if (debug_dump) out << "/***  UNDEFINED  ***/ undefined /* not allowed */";
-                else throw bad_value("undefined is not allowed");
-            }
-
-            if (value->as_null())
-            {
-                if (debug_dump) out << "/***  NULL  ***/ ";
-                out << "null";
-            }
-
-            if (const auto val = value->as_bool())
-            {
-                if (debug_dump) out << "/***  BOOLEAN  ***/ ";
-                out << (*val ? "true" : "false");
-            }
-
-            if (const auto val = value->as_integer())
-            {
-                if (debug_dump) out << "/***  INTEGER  ***/ ";
-                json_t::integer_t v = *val;
-                json_t::char_t v_str[128]{};
-                auto [ptr, ec] = std::to_chars(std::begin(v_str), std::end(v_str), v, 10);
-                if (ec != std::errc{} || *ptr != '\0') throw bad_value("failed to to_chars(integer)");
-                out << v_str;
-            }
-
-            if (const auto val = value->as_floating())
-            {
-                if (debug_dump) out << "/***  FLOATING  ***/ ";
-                json_t::floating_t v = *val;
-                if (std::isnan(v))
-                {
-                    if (debug_dump) out << "NaN /* not allowed */";
-                    else throw bad_value("NaN is not allowed");
-                }
-
-                if (std::isinf(v))
-                {
-                    out << (v > 0 ? "1.0e999999999" : "-1.0e999999999");
-                    return;
-                }
-
-
-                std::chars_format format = std::chars_format::general;
-                const auto precision = std::clamp<int>(static_cast<int>(out.precision()), 0, 64);
-                const auto overflow_limit = std::pow(static_cast<json_t::floating_t>(10), precision);
-                const auto underflow_limit = std::pow(static_cast<json_t::floating_t>(10), precision);
-
-                if (const auto abs = std::abs(v); abs < overflow_limit && abs > underflow_limit)
-                {
-                    const auto mode = out.flags() & std::ios_base::floatfield;
-                    if (mode == std::ios_base::fixed) format = std::chars_format::fixed;
-                    if (mode == std::ios_base::scientific) format = std::chars_format::scientific;
-                }
-
-#if (defined(__cpp_lib_to_chars) && __cpp_lib_to_chars >= 201611L) // compiler has floating-point to_chars
-                json_t::char_t v_str[128]{};
-                auto [ptr, ec] = std::to_chars(std::begin(v_str), std::end(v_str), v, format, precision);
-                if (ec != std::errc{} || *ptr != '\0') throw bad_value("failed to to_chars(floating)");
-#else // use fallback implementation
-                std::ostringstream tmp{};
-                tmp.imbue(std::locale::classic());
-                if (format == std::chars_format::fixed) tmp << std::fixed;
-                if (format == std::chars_format::scientific) tmp << std::scientific;
-                tmp << std::setprecision(precision);
-                tmp << v;
-                auto v_str = tmp.str();
-#endif
-
-                out << v_str;
-            }
-
-            constexpr auto export_string = [](std::ostream& dst, const json_t::string_t& val)
-            {
-                dst << '"';
-                for (const char c : val)
-                {
-                    switch (c)
-                    {
-                    case '\n':
-                        dst << "\\n";
-                        break;
-                    case '\t':
-                        dst << "\\t";
-                        break;
-                    case '\b':
-                        dst << "\\b";
-                        break;
-                    case '\f':
-                        dst << "\\f";
-                        break;
-                    case '\r':
-                        dst << "\\r";
-                        break;
-                    case '\\':
-                        dst << "\\\\";
-                        break;
-                    case '/':
-                        dst << "\\/";
-                        break;
-                    case '"':
-                        dst << "\\\"";
-                        break;
-                    default:
-                        if (static_cast<unsigned char>(c) < ' ' || (static_cast<unsigned char>(c) == 0xFF))
-                        {
-                            std::ostringstream oss;
-                            oss << "\\u" << std::hex << std::setfill('0') << std::setw(4) << static_cast<int>(static_cast<unsigned char>(c));
-                            dst << oss.str();
-                        }
-                        else
-                        {
-                            dst << c;
-                        }
-                        break;
-                    }
-                }
-                dst << '"';
-            };
-
-            if (const auto val = value->as_string())
-            {
-                if (debug_dump) out << "/***  STRING  ***/ ";
-                export_string(out, *val);
-            }
-
-            if (const auto val = value->as_array())
-            {
-                if (val->empty())
-                {
-                    if (debug_dump) out << "/***  ARRAY[0]  ***/ ";
-                    out << "[]";
-                }
-                else
-                {
-                    if (debug_dump) out << "/***  ARRAY[" << val->size() << "]  ***/ ";
-                    out << "[";
-                    if (pretty) out << "\n";
-                    indent_stack.push_back(' ');
-                    indent_stack.push_back(' ');
-                    for (auto it = val->begin(); it != val->end(); ++it)
-                    {
-                        if (it != val->begin()) out << ',' << (pretty ? "\n" : "");
-                        if (pretty) out << indent_stack;
-                        write_element(out, *it, pretty, indent_stack, debug_dump);
-                    }
-                    indent_stack.pop_back();
-                    indent_stack.pop_back();
-                    if (pretty) out << "\n" << indent_stack;
-                    out << "]";
-                }
-            }
-
-            if (const auto val = value->as_object())
-            {
-                if (val->empty())
-                {
-                    if (debug_dump) out << "/***  OBJECT[0]  ***/ ";
-                    out << "{}";
-                }
-                else
-                {
-                    if (debug_dump) out << "/***  OBJECT[" << val->size() << "]  ***/  ";
-                    out << "{";
-                    if (pretty) out << "\n";
-
-                    indent_stack.push_back(' ');
-                    indent_stack.push_back(' ');
-                    for (auto it = val->begin(); it != val->end(); ++it)
-                    {
-                        if (it != val->begin()) out << ',' << (pretty ? "\n" : "");
-                        if (pretty) out << indent_stack;
-                        export_string(out, it->first);
-                        out << ":";
-                        if (pretty) out << " ";
-                        write_element(out, it->second, pretty, indent_stack, debug_dump);
-                    }
-                    indent_stack.pop_back();
-                    indent_stack.pop_back();
-                    if (pretty) out << "\n" << indent_stack;
-                    out << "}";
-                }
-            }
+            json_string_t result;
+            json_stringifier::write_json(std::back_inserter(result), json, {}, pretty, debug_dump);
+            return result;
         }
     };
 
