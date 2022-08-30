@@ -445,26 +445,15 @@ namespace nanojson2
         // i/o
         class json_reader;
         class json_writer;
+
+        // i/o
         using json_istream = std::basic_istream<char_t>;
+        [[nodiscard]] static json_t read_json_string(json_istream& src);
+        [[nodiscard]] static json_t parse(const json_string_view_t& source);
+
         using json_ostream = std::basic_ostream<char_t>;
-
-        static json_t read_json_string(json_istream& src);
-
         void write_json_string(json_ostream& dst, bool pretty = false) const;
-
-        template <class json_string_t>
-        [[nodiscard]] static json_t parse(json_string_t&& source)
-        {
-            std::basic_istringstream<json_t::char_t> iss{std::forward<json_string_t>(source)};
-            return read_json_string(iss);
-        }
-
-        [[nodiscard]] json_string_t to_json_string(bool pretty = false) const
-        {
-            std::basic_ostringstream<json_t::char_t> oss;
-            write_json_string(oss, pretty);
-            return oss.str();
-        }
+        [[nodiscard]] json_string_t to_json_string(bool pretty = false) const;
 
     public:
         // extensive constructors
@@ -1446,11 +1435,20 @@ namespace nanojson2
         return json_reader::read_json(src);
     }
 
+    inline json_t json_t::parse(const json_string_view_t& source)
+    {
+        return json_reader::parse_json(source);
+    }
+
     inline void json_t::write_json_string(json_ostream& dst, bool pretty) const
     {
         json_writer::write_json(dst, *this, pretty);
     }
 
+    inline json_t::json_string_t json_t::to_json_string(bool pretty) const
+    {
+        return json_writer::to_json_string(*this, pretty);
+    }
 
     ////
     //// json_t::json_ext specializations
