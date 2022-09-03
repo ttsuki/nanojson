@@ -20,6 +20,7 @@
 #include <utility>
 #include <algorithm>
 #include <stdexcept>
+#include <memory>
 
 #include <variant>
 #include <optional>
@@ -90,69 +91,80 @@ namespace nanojson2
         object_t,
     };
 
+    template <json_type_index i>
+    struct in_place_index_t : std::in_place_index_t<static_cast<size_t>(i)>
+    {
+        constexpr in_place_index_t() : std::in_place_index_t<static_cast<size_t>(i)>{} {}
+    };
+
+    struct in_place_index
+    {
+        static constexpr inline in_place_index_t<json_type_index::undefined_t> undefined_t{};
+        static constexpr inline in_place_index_t<json_type_index::null_t> null_t{};
+        static constexpr inline in_place_index_t<json_type_index::bool_t> bool_t{};
+        static constexpr inline in_place_index_t<json_type_index::integer_t> integer_t{};
+        static constexpr inline in_place_index_t<json_type_index::floating_t> floating_t{};
+        static constexpr inline in_place_index_t<json_type_index::string_t> string_t{};
+        static constexpr inline in_place_index_t<json_type_index::array_t> array_t{};
+        static constexpr inline in_place_index_t<json_type_index::object_t> object_t{};
+    };
+
     /// json_t: represents a json element
     class json_t final
     {
-    public:
-        using type_index = json_type_index;
-
+    public: // type set definition
         using char_t = char;
+        using char_traits = std::char_traits<char_t>;
+
+        using allocator_type = std::allocator<char_t>;
+        using allocator_traits = std::allocator_traits<allocator_type>;
+        template <class U> using allocator_type_for = typename allocator_traits::template rebind_alloc<U>;
 
         using undefined_t = std::monostate;
         using null_t = std::nullptr_t;
         using bool_t = bool;
         using integer_t = long long int;
         using floating_t = long double;
-        using string_t = std::basic_string<char_t>;
-        using array_t = std::vector<json_t>;
-        using object_t = std::map<string_t, json_t, std::less<>>;
-
         using number_t = floating_t;
-        using string_view_t = std::basic_string_view<string_t::value_type>;
-        using array_index_t = array_t::size_type;
+        using string_t = std::basic_string<char_t, char_traits, allocator_type_for<char_t>>;
+        using string_view_t = std::basic_string_view<char_t, char_traits>;
+        using array_index_t = size_t;
+        using array_index_view_t = size_t;
+        using array_t = std::vector<json_t, allocator_type_for<json_t>>;
+        using object_key_t = string_t;
         using object_key_view_t = string_view_t;
+        using object_t = std::map<object_key_t, json_t, std::less<>, allocator_type_for<std::pair<const object_key_t, json_t>>>;
 
-        using json_string_t = std::basic_string<char_t>;
-        using json_string_view_t = std::basic_string_view<char_t>;
+        using json_string_t = string_t;
+        using json_string_view_t = string_view_t;
 
+        using variant_type = std::variant<undefined_t, null_t, bool_t, integer_t, floating_t, string_t, array_t, object_t>;
+
+    public:
         /// json_value_t: holds a json element value
         class json_value_t final
         {
+            variant_type value_{};
+
         private:
             friend class json_t;
-
-            static inline constexpr undefined_t value_of_undefined = undefined_t{};
-            static inline constexpr null_t value_of_null = null_t{};
-
-            std::variant<
-                undefined_t,
-                null_t,
-                bool_t,
-                integer_t,
-                floating_t,
-                string_t,
-                array_t,
-                object_t> value_ = value_of_undefined;
-
-            constexpr json_value_t() = default;
-            constexpr json_value_t(null_t value) : value_{value} { }
-            constexpr json_value_t(bool_t value) : value_{value} { }
-            constexpr json_value_t(integer_t value) : value_{value} { }
-            constexpr json_value_t(floating_t value) : value_{value} { }
-            json_value_t(string_t value) : value_{std::move(value)} { }
-            json_value_t(array_t value) : value_{std::move(value)} { }
-            json_value_t(object_t value) : value_{std::move(value)} { }
+            json_value_t() = default;
             json_value_t(const json_value_t& other) = default;
             json_value_t(json_value_t&& other) noexcept = default;
+
+            template <json_type_index type_index, class... Args>
+            json_value_t(in_place_index_t<type_index> index, Args&&... args)
+                : value_(index, std::forward<Args>(args)...) { }
+
             json_value_t& operator=(const json_value_t& other) = default;
             json_value_t& operator=(json_value_t&& other) noexcept = default;
-            ~json_value_t() = default;
 
         public:
             bool operator ==(const json_value_t& rhs) const noexcept { return value_ == rhs.value_; }
             bool operator !=(const json_value_t& rhs) const noexcept { return value_ != rhs.value_; }
 
-            [[nodiscard]] type_index get_type() const noexcept { return static_cast<type_index>(value_.index()); }
+            [[nodiscard]] json_type_index get_type() const noexcept { return static_cast<json_type_index>(value_.index()); }
+            const variant_type& as_variant() const { return value_; }
 
             template <class T> [[nodiscard]] bool is() const noexcept { return std::holds_alternative<T>(value_); }
             [[nodiscard]] bool is_defined() const noexcept { return !is<undefined_t>(); }
@@ -233,23 +245,36 @@ namespace nanojson2
         };
 
     private:
-        json_value_t value_ = json_value_t{json_value_t::value_of_null};
+        json_value_t value_;
+
 
     public:
         // constructors
-        constexpr json_t(undefined_t) noexcept : value_{} { return; }
-        constexpr json_t(null_t value = json_value_t::value_of_null) noexcept : value_{value} { return; }
-        constexpr json_t(bool_t value) noexcept : value_{value} { return; }
-        constexpr json_t(integer_t value) noexcept : value_{value} { return; }
-        constexpr json_t(floating_t value) noexcept : value_{value} { return; }
-        json_t(string_t value) : value_{(std::move(value))} { return; }
-        json_t(array_t value) : value_{(std::move(value))} { return; }
-        json_t(object_t value) : value_{(std::move(value))} { return; }
-
+        json_t() = default;
         json_t(const json_t& other) = default;
         json_t(json_t&& other) noexcept = default;
         json_t& operator=(const json_t& other) = default;
         json_t& operator=(json_t&& other) noexcept = default;
+
+        template <json_type_index type_index, class...Args> json_t(in_place_index_t<type_index> index, Args&&...args) : value_(index, std::forward<Args>(args)...) { }
+
+        json_t(const undefined_t& value) : json_t(in_place_index::undefined_t, std::forward<decltype(value)>(value)) { }
+        json_t(const null_t& value) : json_t(in_place_index::null_t, std::forward<decltype(value)>(value)) { }
+        json_t(const bool_t& value) : json_t(in_place_index::bool_t, std::forward<decltype(value)>(value)) { }
+        json_t(const integer_t& value) : json_t(in_place_index::integer_t, std::forward<decltype(value)>(value)) { }
+        json_t(const floating_t& value) : json_t(in_place_index::floating_t, std::forward<decltype(value)>(value)) { }
+        json_t(const string_t& value) : json_t(in_place_index::string_t, std::forward<decltype(value)>(value)) { }
+        json_t(const array_t& value) : json_t(in_place_index::array_t, std::forward<decltype(value)>(value)) { }
+        json_t(const object_t& value) : json_t(in_place_index::object_t, std::forward<decltype(value)>(value)) { }
+
+        json_t(undefined_t&& value) : json_t(in_place_index::undefined_t, std::forward<decltype(value)>(value)) { }
+        json_t(null_t&& value) : json_t(in_place_index::null_t, std::forward<decltype(value)>(value)) { }
+        json_t(bool_t&& value) : json_t(in_place_index::bool_t, std::forward<decltype(value)>(value)) { }
+        json_t(integer_t&& value) : json_t(in_place_index::integer_t, std::forward<decltype(value)>(value)) { }
+        json_t(floating_t&& value) : json_t(in_place_index::floating_t, std::forward<decltype(value)>(value)) { }
+        json_t(string_t&& value) : json_t(in_place_index::string_t, std::forward<decltype(value)>(value)) { }
+        json_t(array_t&& value) : json_t(in_place_index::array_t, std::forward<decltype(value)>(value)) { }
+        json_t(object_t&& value) : json_t(in_place_index::object_t, std::forward<decltype(value)>(value)) { }
 
         ~json_t() = default;
 
@@ -269,7 +294,6 @@ namespace nanojson2
         const json_value_t* operator ->() const noexcept { return &value(); }       //
         json_value_t& operator *() noexcept { return value(); }                     //
         json_value_t* operator ->() noexcept { return &value(); }                   //
-
 
     public:
         // children
@@ -391,28 +415,27 @@ namespace nanojson2
 
             json_t& operator =(json_t value)
             {
-                if (const normal_pointer* p = std::get_if<normal_pointer>(&pointer_))
+                if (normal_pointer* p = std::get_if<normal_pointer>(&pointer_))
                 {
                     return **p = json_t(std::move(value));
                 }
 
-                if (const array_write_pointer* p = std::get_if<array_write_pointer>(&pointer_))
+                if (array_write_pointer* p = std::get_if<array_write_pointer>(&pointer_))
                 {
                     auto& [array, index] = *p;
 
                     if (index >= array->size())
                         array->resize(index + 1);
 
-                    json_t& r = (*array)[index] = json_t(std::move(value));
+                    json_t& r = array->at(index) = std::move(value);
                     pointer_ = normal_pointer{&r}; // update pointer to real instance
                     return r;
                 }
 
-                if (const object_write_pointer* p = std::get_if<object_write_pointer>(&pointer_))
+                if (object_write_pointer* p = std::get_if<object_write_pointer>(&pointer_))
                 {
                     auto& [object, key] = *p;
-
-                    json_t& r = (*object)[key] = json_t(std::move(value));
+                    json_t& r = object->insert_or_assign(std::move(key), std::move(value)).first->second;
                     pointer_ = normal_pointer{&r}; // update pointer to real instance
                     return r;
                 }
@@ -505,7 +528,7 @@ namespace nanojson2
             }
 
         private:
-            using char_traits = std::char_traits<json_t::char_t>;
+            using char_traits = typename json_t::char_traits;
             using char_type = typename char_traits::char_type;
             using int_type = typename char_traits::int_type;
 
@@ -576,9 +599,7 @@ namespace nanojson2
 
             option option_bits_{};
 
-            reader(character_input_iterator begin, character_input_iterator end, option option)
-                : input_{begin, end}
-                , option_bits_(option) { }
+            reader(character_input_iterator begin, character_input_iterator end, option option) : input_{begin, end}, option_bits_(option) { }
 
             [[nodiscard]] json_t execute()
             {
@@ -601,14 +622,14 @@ namespace nanojson2
                     if (!input_.eat('u')) throw bad_format("invalid 'null' literal: expected 'u'", *input_);
                     if (!input_.eat('l')) throw bad_format("invalid 'null' literal: expected 'l'", *input_);
                     if (!input_.eat('l')) throw bad_format("invalid 'null' literal: expected 'l'", *input_);
-                    return json_t::null_t{};
+                    return json_t(in_place_index::null_t);
 
                 case 't': // true
                     if (!input_.eat('t')) throw bad_format("invalid 'true' literal: expected 't'", *input_);
                     if (!input_.eat('r')) throw bad_format("invalid 'true' literal: expected 'r'", *input_);
                     if (!input_.eat('u')) throw bad_format("invalid 'true' literal: expected 'u'", *input_);
                     if (!input_.eat('e')) throw bad_format("invalid 'true' literal: expected 'e'", *input_);
-                    return json_t::bool_t{true};
+                    return json_t(in_place_index::bool_t, true);
 
                 case 'f': // false
                     if (!input_.eat('f')) throw bad_format("invalid 'false' literal: expected 'f'", *input_);
@@ -616,7 +637,7 @@ namespace nanojson2
                     if (!input_.eat('l')) throw bad_format("invalid 'false' literal: expected 'l'", *input_);
                     if (!input_.eat('s')) throw bad_format("invalid 'false' literal: expected 's'", *input_);
                     if (!input_.eat('e')) throw bad_format("invalid 'false' literal: expected 'e'", *input_);
-                    return json_t::bool_t{false};
+                    return json_t(in_place_index::bool_t, false);
 
                 case '+':
                 case '-':
@@ -773,7 +794,7 @@ namespace nanojson2
                 {
                     json_t::integer_t ret{};
                     auto [ptr, ec] = std::from_chars(buffer, p, ret, 10);
-                    if (ec == std::errc{} && ptr == p) return ret; // integer OK
+                    if (ec == std::errc{} && ptr == p) return json_t(in_place_index::integer_t, ret); // integer OK
                 }
 
                 // try to parse as floating type (should succeed)
@@ -794,11 +815,26 @@ namespace nanojson2
 
                     if (ptr == p)
                     {
-                        if (ec == std::errc{}) return ret; // floating OK
+                        if (ec == std::errc{}) return json_t(in_place_index::floating_t, ret); // floating OK
+
                         if (ec == std::errc::result_out_of_range)
                         {
-                            if (exp_offset < 0) return buffer[0] == '-' ? json_t::floating_t{-0.0} : json_t::floating_t{+0.0};                                          // underflow
-                            else return buffer[0] == '-' ? -std::numeric_limits<json_t::floating_t>::infinity() : +std::numeric_limits<json_t::floating_t>::infinity(); // overflow
+                            if (exp_offset >= 0)
+                            {
+                                // overflow
+                                if (buffer[0] != '-')
+                                    return json_t(in_place_index::floating_t, +std::numeric_limits<json_t::floating_t>::infinity());
+                                else
+                                    return json_t(in_place_index::floating_t, -std::numeric_limits<json_t::floating_t>::infinity());
+                            }
+                            else
+                            {
+                                // underflow
+                                if (buffer[0] != '-')
+                                    return json_t(in_place_index::floating_t, static_cast<json_t::floating_t>(+0.0));
+                                else
+                                    return json_t(in_place_index::floating_t, static_cast<json_t::floating_t>(-0.0));
+                            }
                         }
                     }
                 }
@@ -807,13 +843,15 @@ namespace nanojson2
                 throw bad_format("invalid number format: failed to parse");
             }
 
-            json_t::string_t read_string()
+            json_t read_string()
             {
                 // check quote character
                 assert(*input_ == '"');
                 int_type quote = *input_++; // '"'
 
-                json_t::string_t ret;
+                json_t result(in_place_index::string_t);
+                json_t::string_t& ret = *result->as_string();
+
                 while (true)
                 {
                     if (input_.eat('\\')) // escape sequence
@@ -897,17 +935,20 @@ namespace nanojson2
                     ++input_;
                 }
 
-                return ret;
+                return result;
             }
 
-            json_t::array_t read_array()
+            json_t read_array()
             {
                 if (!input_.eat('[')) throw bad_format("logic error");
+
+                json_t result(in_place_index::array_t);
+                json_t::array_t& ret = *result->as_array();
+
                 eat_whitespaces();
 
-                if (input_.eat(']')) return json_t::array_t{}; // empty array
+                if (input_.eat(']')) return result; // empty array
 
-                json_t::array_t ret{};
                 while (true)
                 {
                     // read value
@@ -924,30 +965,37 @@ namespace nanojson2
                     else if (input_.eat(']')) break;
                     else throw bad_format("invalid array format: ',' or ']' expected", *input_);
                 }
-                return ret;
+
+                return result;
             }
 
-            json_t::object_t read_object()
+            json_t read_object()
             {
                 if (!input_.eat('{')) throw bad_format("logic error");
 
+                json_t result(in_place_index::object_t);
+                json_t::object_t& ret = *result->as_object();
+
                 eat_whitespaces();
 
-                if (input_.eat('}')) return json_t::object_t{}; // empty object_t
+                if (input_.eat('}')) return result; // empty object_t
 
-                json_t::object_t ret;
                 while (true)
                 {
                     // read key
-                    json_t::string_t key{};
-
-                    if (*input_ == '"') key = read_string();
-                    else if (has_option(option::allow_unquoted_object_key))
+                    json_t key = [&]
                     {
-                        while (*input_ != EOF && *input_ > ' ' && *input_ != ':')
-                            key += static_cast<char_type>(*input_++);
-                    }
-                    else throw bad_format("invalid object format: expected object key", *input_);
+                        if (*input_ == '"') return read_string();
+                        else if (has_option(option::allow_unquoted_object_key))
+                        {
+                            json_t k(in_place_index::string_t);
+                            json_t::string_t& t = *k->as_string();
+                            while (*input_ != EOF && *input_ > ' ' && *input_ != ':')
+                                t += static_cast<char_type>(*input_++);
+                            return k;
+                        }
+                        else throw bad_format("invalid object format: expected object key", *input_);
+                    }();
 
                     eat_whitespaces();
 
@@ -957,7 +1005,7 @@ namespace nanojson2
                     eat_whitespaces();
 
                     // read value
-                    ret[key] = read_element();
+                    ret.insert_or_assign(std::move(*key->as_string()), read_element());
 
                     eat_whitespaces();
 
@@ -972,7 +1020,7 @@ namespace nanojson2
                     else throw bad_format("invalid object format: expected ',' or '}'", *input_);
                 }
 
-                return ret;
+                return result;
             }
 
             void eat_utf8bom()
@@ -1025,7 +1073,7 @@ namespace nanojson2
                 }
             }
 
-            [[nodiscard]] nanojson2::bad_format bad_format(std::string_view reason, std::optional<int_type> but_encountered = std::nullopt) const
+            [[nodiscard]] exceptions::bad_format bad_format(std::string_view reason, std::optional<int_type> but_encountered = std::nullopt) const
             {
                 std::stringstream message;
                 message << "bad_format: ";
@@ -1055,20 +1103,27 @@ namespace nanojson2
                 message << (input_.current_position_column_ + 1);
                 message << ".";
 
-                return nanojson2::bad_format{message.str()};
+                return exceptions::bad_format{message.str()};
             }
         };
 
         template <class character_input_iterator>
-        static json_t parse_json(character_input_iterator begin, character_input_iterator end, option loose = option::default_option)
+        static json_t parse_json(
+            character_input_iterator begin,
+            character_input_iterator end,
+            option loose = option::default_option)
         {
-            return reader<character_input_iterator>::read_json(std::move(begin), std::move(end), loose);
+            return reader<character_input_iterator>::read_json(
+                std::move(begin), std::move(end),
+                loose);
         }
 
         template <
             class istream,
             std::enable_if_t<std::is_constructible_v<std::istreambuf_iterator<json_t::char_t>, istream&>>* = nullptr>
-        static json_t read_json(istream& source, option loose = option::default_option)
+        static json_t read_json(
+            istream& source,
+            option loose = option::default_option)
         {
             return parse_json(
                 std::istreambuf_iterator<json_t::char_t>(source),
@@ -1148,6 +1203,7 @@ namespace nanojson2
                         /* 50 */ {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, "\\\\", {}, {}, {},
                         /* 60 */ {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
                         /* 70 */ {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, "\\u007F",
+                        /* 80 */ {}, // ... continue to 0xFF
                     };
 
                     if (auto p = char_table_[static_cast<uint8_t>(c)]; !p.empty())
@@ -1178,7 +1234,6 @@ namespace nanojson2
                 case json_type_index::string_t: return write_element(*value.value().as_string());
                 case json_type_index::array_t: return write_element(*value.value().as_array());
                 case json_type_index::object_t: return write_element(*value.value().as_object());
-                default: return;
                 }
             }
 
@@ -1429,12 +1484,12 @@ namespace nanojson2
 
     inline json_t json_t::read_json_string(json_istream& src)
     {
-        return json_reader::read_json(src);
+        return json_reader::read_json(src, json_reader::option::default_option);
     }
 
     inline json_t json_t::parse(const json_string_view_t& source)
     {
-        return json_reader::parse_json(source);
+        return json_reader::parse_json(source, json_reader::option::default_option);
     }
 
     inline void json_t::write_json_string(json_ostream& dst, bool pretty) const
@@ -1487,12 +1542,12 @@ namespace nanojson2
     }
 
     // built-in ext ctor for primitives.
-    template <class T> struct json_t::json_ext<T, std::enable_if_t<std::is_pointer_v<T>>> : json_ext_ctor_helper::prevent_conversion { };                                        // prevent `bool` constructor by pointer types
-    template <class T> struct json_t::json_ext<T, std::enable_if_t<std::is_integral_v<T>>> : json_ext_ctor_helper::static_cast_to_value<integer_t> { };                          // map all integral types (`char`, `int`, `unsigned long`, ...) to `int_t`: hint: this is also true for `bool`, but concrete constructor `json_t(bool)` is selected in the real calling situation
-    template <class T> struct json_t::json_ext<T, std::enable_if_t<std::is_floating_point_v<T>>> : json_ext_ctor_helper::static_cast_to_value<floating_t> { };                   // map all floating point types (`float`, `double`, ...) to `float_t` (`std::is_floating_point<T>`)
-    template <> struct json_t::json_ext<const json_t::char_t*> : json_ext_ctor_helper::pass_to_value_ctor<string_t> { };                                                         // map `const char*` to `string_t`
-    template <> struct json_t::json_ext<std::basic_string_view<json_t::char_t, std::char_traits<json_t::char_t>>> : json_ext_ctor_helper::pass_to_value_ctor<string_t> { };      // map `std::string_view` to `string_t`
-    template <class A> struct json_t::json_ext<std::basic_string<json_t::char_t, std::char_traits<json_t::char_t>, A>> : json_ext_ctor_helper::pass_to_value_ctor<string_t> { }; // map `std::string` to `string_t`
+    template <class T> struct json_t::json_ext<T, std::enable_if_t<std::is_pointer_v<T>>> : json_ext_ctor_helper::prevent_conversion { };                           // prevent `bool` constructor by pointer types
+    template <class T> struct json_t::json_ext<T, std::enable_if_t<std::is_integral_v<T>>> : json_ext_ctor_helper::static_cast_to_value<integer_t> { };             // map all integral types (`char`, `int`, `unsigned long`, ...) to `int_t`: hint: this is also true for `bool`, but concrete constructor `json_t(bool)` is selected in the real calling situation
+    template <class T> struct json_t::json_ext<T, std::enable_if_t<std::is_floating_point_v<T>>> : json_ext_ctor_helper::static_cast_to_value<floating_t> { };      // map all floating point types (`float`, `double`, ...) to `float_t` (`std::is_floating_point<T>`)
+    template <> struct json_t::json_ext<const json_t::char_t*> : json_ext_ctor_helper::pass_to_value_ctor<string_t> { };                                            // map `const char*` to `string_t`
+    template <> struct json_t::json_ext<std::basic_string_view<json_t::char_t, json_t::char_traits>> : json_ext_ctor_helper::pass_to_value_ctor<string_t> { };      // map `std::string_view` to `string_t`
+    template <class A> struct json_t::json_ext<std::basic_string<json_t::char_t, json_t::char_traits, A>> : json_ext_ctor_helper::pass_to_value_ctor<string_t> { }; // map `std::string` to `string_t`
 
     // built-in ext ctor for array_t: map some STL container`<T>` to `array_t`, if `T` is convertible json_t.
     template <class U> struct json_t::json_ext<std::initializer_list<U>, std::enable_if_t<std::is_constructible_v<json_t, U>>> : json_ext_ctor_helper::pass_iterator_pair_to_value_ctor<array_t> { };                           // map `std::initializer_list<T>` to `array_t`
