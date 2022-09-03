@@ -145,19 +145,102 @@ namespace nanojson2
         class json_value_t final
         {
             variant_type value_{};
+            allocator_type alloc_{};
 
         private:
             friend class json_t;
+
             json_value_t() = default;
-            json_value_t(const json_value_t& other) = default;
-            json_value_t(json_value_t&& other) noexcept = default;
+            json_value_t(const allocator_type& alloc) : alloc_(alloc) { }
+            json_value_t(const json_value_t& other) : alloc_(allocator_traits::select_on_container_copy_construction(other.alloc_)) { assign(other.value_); }
+            json_value_t(const json_value_t& other, const allocator_type& alloc) : alloc_(alloc) { assign(other.value_); }
+            json_value_t(json_value_t&& other) noexcept : alloc_{std::move(other.alloc_)} { assign(std::move(other.value_)); }
+            json_value_t(json_value_t&& other, const allocator_type& alloc) noexcept : alloc_{alloc} { assign(std::move(other.value_)); }
 
             template <json_type_index type_index, class... Args>
-            json_value_t(in_place_index_t<type_index> index, Args&&... args)
-                : value_(index, std::forward<Args>(args)...) { }
+            json_value_t(std::allocator_arg_t, const allocator_type& alloc, in_place_index_t<type_index> index, Args&& ... args)
+                : alloc_(alloc)
+            {
+                this->emplace(index, std::forward<Args>(args)...);
+            }
 
-            json_value_t& operator=(const json_value_t& other) = default;
-            json_value_t& operator=(json_value_t&& other) noexcept = default;
+            json_value_t& operator=(const json_value_t& other)
+            {
+                if (std::addressof(other) != this)
+                {
+                    propagate_allocator(other.alloc_, typename allocator_traits::propagate_on_container_copy_assignment{});
+                    assign(other.value_);
+                }
+                return *this;
+            }
+
+            json_value_t& operator=(json_value_t&& other) noexcept
+            {
+                if (std::addressof(other) != this)
+                {
+                    propagate_allocator(std::move(other.alloc_), typename allocator_traits::propagate_on_container_move_assignment{});
+                    assign(std::move(other.value_));
+                }
+                return *this;
+            }
+
+
+        private:
+            template <
+                class Allocator = allocator_type,
+                bool do_propagate_allocator = false,
+                std::enable_if<std::is_same_v<std::decay_t<Allocator>, allocator_type>>* = nullptr>
+            void propagate_allocator(Allocator&& alloc, std::bool_constant<do_propagate_allocator>  = {})
+            {
+                if constexpr (do_propagate_allocator)
+                    if (this->alloc_ != alloc)
+                        this->alloc_ = std::forward<Allocator>(alloc);
+            }
+
+            template <
+                class Value = variant_type,
+                std::enable_if<std::is_same_v<std::decay_t<Value>, variant_type>>* = nullptr>
+            void assign(Value&& value)
+            {
+                switch (static_cast<json_type_index>(value.index()))
+                {
+                case json_type_index::undefined_t: return this->emplace(in_place_index::undefined_t, std::get<undefined_t>(std::forward<Value>(value)));
+                case json_type_index::null_t: return this->emplace(in_place_index::null_t, std::get<null_t>(std::forward<Value>(value)));
+                case json_type_index::bool_t: return this->emplace(in_place_index::bool_t, std::get<bool_t>(std::forward<Value>(value)));
+                case json_type_index::integer_t: return this->emplace(in_place_index::integer_t, std::get<integer_t>(std::forward<Value>(value)));
+                case json_type_index::floating_t: return this->emplace(in_place_index::floating_t, std::get<floating_t>(std::forward<Value>(value)));
+                case json_type_index::string_t: return this->emplace(in_place_index::string_t, std::get<string_t>(std::forward<Value>(value)));
+                case json_type_index::array_t: return this->emplace(in_place_index::array_t, std::get<array_t>(std::forward<Value>(value)));
+                case json_type_index::object_t: return this->emplace(in_place_index::object_t, std::get<object_t>(std::forward<Value>(value)));
+                }
+                throw bad_access();
+            }
+
+            template <json_type_index index, class...Args>
+            void emplace(in_place_index_t<index>, Args&&...args)
+            {
+                using T = std::variant_alternative_t<static_cast<size_t>(index), variant_type>;
+                using A = allocator_type;
+                constexpr bool use_allocator = std::uses_allocator_v<T, A>;
+                constexpr bool constructible_without_allocator = !use_allocator && std::is_constructible_v<T, Args...>;
+                constexpr bool constructible_with_allocator = use_allocator && std::is_constructible_v<T, Args..., const A&>;
+                constexpr bool constructible_with_allocator_tag = use_allocator && std::is_constructible_v<T, std::allocator_arg_t, const A&, Args...>;
+
+                static_assert(
+                    /* 00 */ constructible_without_allocator ||
+                    /* A1 */ constructible_with_allocator ||
+                    /* A2 */ constructible_with_allocator_tag,
+                    "The variant alternative type is not sufficient requirements for use-allocator-construction.");
+
+                if constexpr (constructible_without_allocator)
+                    this->value_.template emplace<static_cast<size_t>(index)>(std::forward<Args>(args) ...); // 00
+                else if constexpr (constructible_with_allocator)
+                    this->value_.template emplace<static_cast<size_t>(index)>(std::forward<Args>(args) ..., this->alloc_); // A1
+                else if constexpr (constructible_with_allocator_tag)
+                    this->value_.template emplace<static_cast<size_t>(index)>(std::allocator_arg_t{}, this->alloc_, std::forward<Args>(args) ...); // A2
+                else
+                    throw std::logic_error("unreachable here");
+            }
 
         public:
             bool operator ==(const json_value_t& rhs) const noexcept { return value_ == rhs.value_; }
@@ -251,30 +334,34 @@ namespace nanojson2
     public:
         // constructors
         json_t() = default;
-        json_t(const json_t& other) = default;
-        json_t(json_t&& other) noexcept = default;
+        json_t(const allocator_type& alloc) : value_{alloc} { }
+        json_t(const json_t& other, const allocator_type& alloc) : value_{other.value_, alloc} { }
+        json_t(const json_t& other) : value_{other.value_} { }
+        json_t(json_t&& other) noexcept : value_{std::move(other.value_)} { }
+        json_t(json_t&& other, const allocator_type& alloc) noexcept : value_{std::move(other.value_), alloc} { }
         json_t& operator=(const json_t& other) = default;
         json_t& operator=(json_t&& other) noexcept = default;
 
-        template <json_type_index type_index, class...Args> json_t(in_place_index_t<type_index> index, Args&&...args) : value_(index, std::forward<Args>(args)...) { }
+        template <json_type_index type_index, class Arg> json_t(in_place_index_t<type_index> index, Arg&& value, const allocator_type& alloc = allocator_type{}) : value_{std::allocator_arg, alloc, index, std::forward<Arg>(value)} { }
+        template <json_type_index type_index, class...Args> json_t(std::allocator_arg_t tag, const allocator_type& alloc, in_place_index_t<type_index> index, Args&&...args) : value_{tag, alloc, index, std::forward<Args>(args)...} { }
 
-        json_t(const undefined_t& value) : json_t(in_place_index::undefined_t, std::forward<decltype(value)>(value)) { }
-        json_t(const null_t& value) : json_t(in_place_index::null_t, std::forward<decltype(value)>(value)) { }
-        json_t(const bool_t& value) : json_t(in_place_index::bool_t, std::forward<decltype(value)>(value)) { }
-        json_t(const integer_t& value) : json_t(in_place_index::integer_t, std::forward<decltype(value)>(value)) { }
-        json_t(const floating_t& value) : json_t(in_place_index::floating_t, std::forward<decltype(value)>(value)) { }
-        json_t(const string_t& value) : json_t(in_place_index::string_t, std::forward<decltype(value)>(value)) { }
-        json_t(const array_t& value) : json_t(in_place_index::array_t, std::forward<decltype(value)>(value)) { }
-        json_t(const object_t& value) : json_t(in_place_index::object_t, std::forward<decltype(value)>(value)) { }
+        json_t(const undefined_t& value, const allocator_type& alloc = allocator_type{}) : json_t(in_place_index::undefined_t, std::forward<decltype(value)>(value), alloc) { }
+        json_t(const null_t& value, const allocator_type& alloc = allocator_type{}) : json_t(in_place_index::null_t, std::forward<decltype(value)>(value), alloc) { }
+        json_t(const bool_t& value, const allocator_type& alloc = allocator_type{}) : json_t(in_place_index::bool_t, std::forward<decltype(value)>(value), alloc) { }
+        json_t(const integer_t& value, const allocator_type& alloc = allocator_type{}) : json_t(in_place_index::integer_t, std::forward<decltype(value)>(value), alloc) {}
+        json_t(const floating_t& value, const allocator_type& alloc = allocator_type{}) : json_t(in_place_index::floating_t, std::forward<decltype(value)>(value), alloc) { }
+        json_t(const string_t& value, const allocator_type& alloc = allocator_type{}) : json_t(in_place_index::string_t, std::forward<decltype(value)>(value), alloc) { }
+        json_t(const array_t& value, const allocator_type& alloc = allocator_type{}) : json_t(in_place_index::array_t, std::forward<decltype(value)>(value), alloc) { }
+        json_t(const object_t& value, const allocator_type& alloc = allocator_type{}) : json_t(in_place_index::object_t, std::forward<decltype(value)>(value), alloc) { }
 
-        json_t(undefined_t&& value) : json_t(in_place_index::undefined_t, std::forward<decltype(value)>(value)) { }
-        json_t(null_t&& value) : json_t(in_place_index::null_t, std::forward<decltype(value)>(value)) { }
-        json_t(bool_t&& value) : json_t(in_place_index::bool_t, std::forward<decltype(value)>(value)) { }
-        json_t(integer_t&& value) : json_t(in_place_index::integer_t, std::forward<decltype(value)>(value)) { }
-        json_t(floating_t&& value) : json_t(in_place_index::floating_t, std::forward<decltype(value)>(value)) { }
-        json_t(string_t&& value) : json_t(in_place_index::string_t, std::forward<decltype(value)>(value)) { }
-        json_t(array_t&& value) : json_t(in_place_index::array_t, std::forward<decltype(value)>(value)) { }
-        json_t(object_t&& value) : json_t(in_place_index::object_t, std::forward<decltype(value)>(value)) { }
+        json_t(undefined_t&& value, const allocator_type& alloc = allocator_type{}) : json_t(in_place_index::undefined_t, std::forward<decltype(value)>(value), alloc) { }
+        json_t(null_t&& value, const allocator_type& alloc = allocator_type{}) : json_t(in_place_index::null_t, std::forward<decltype(value)>(value), alloc) { }
+        json_t(bool_t&& value, const allocator_type& alloc = allocator_type{}) : json_t(in_place_index::bool_t, std::forward<decltype(value)>(value), alloc) { }
+        json_t(integer_t&& value, const allocator_type& alloc = allocator_type{}) : json_t(in_place_index::integer_t, std::forward<decltype(value)>(value), alloc) { }
+        json_t(floating_t&& value, const allocator_type& alloc = allocator_type{}) : json_t(in_place_index::floating_t, std::forward<decltype(value)>(value), alloc) { }
+        json_t(string_t&& value, const allocator_type& alloc = allocator_type{}) : json_t(in_place_index::string_t, std::forward<decltype(value)>(value), alloc) { }
+        json_t(array_t&& value, const allocator_type& alloc = allocator_type{}) : json_t(in_place_index::array_t, std::forward<decltype(value)>(value), alloc) { }
+        json_t(object_t&& value, const allocator_type& alloc = allocator_type{}) : json_t(in_place_index::object_t, std::forward<decltype(value)>(value), alloc) { }
 
         ~json_t() = default;
 
@@ -294,6 +381,8 @@ namespace nanojson2
         const json_value_t* operator ->() const noexcept { return &value(); }       //
         json_value_t& operator *() noexcept { return value(); }                     //
         json_value_t* operator ->() noexcept { return &value(); }                   //
+
+        allocator_type get_allocator() const noexcept { return value_.alloc_; }
 
     public:
         // children
@@ -471,12 +560,12 @@ namespace nanojson2
 
         // i/o
         using json_istream = std::basic_istream<char_t>;
-        [[nodiscard]] static json_t read_json_string(json_istream& src);
-        [[nodiscard]] static json_t parse(const json_string_view_t& source);
+        [[nodiscard]] static json_t read_json_string(json_istream& src, const allocator_type& alloc = allocator_type{});
+        [[nodiscard]] static json_t parse(const json_string_view_t& source, const allocator_type& alloc = allocator_type{});
 
         using json_ostream = std::basic_ostream<char_t>;
         void write_json_string(json_ostream& dst, bool pretty = false) const;
-        [[nodiscard]] json_string_t to_json_string(bool pretty = false) const;
+        [[nodiscard]] json_string_t to_json_string(bool pretty = false, const allocator_type& alloc = allocator_type{}) const;
 
     public:
         // extensive constructors
@@ -484,11 +573,11 @@ namespace nanojson2
 
         // copy construct
         template <class T, std::void_t<decltype(json_ext<std::decay_t<const T&>>::serialize(std::declval<const T&>()))>* = nullptr>
-        json_t(const T& value) : json_t(json_ext<std::decay_t<const T&>>::serialize(std::forward<const T>(value))) { }
+        json_t(const T& value, const allocator_type& alloc = allocator_type{}) : json_t(json_ext<std::decay_t<const T&>>::serialize(std::forward<const T>(value)), alloc) { }
 
         // move construct
         template <class T, std::enable_if_t<std::is_rvalue_reference_v<T>, std::void_t<decltype(json_ext<std::decay_t<T>>::serialize(std::declval<T>()))>>* = nullptr>
-        json_t(T&& value) : json_t(json_ext<std::decay_t<T>>::serialize(std::forward<T>(value))) { }
+        json_t(T&& value, const allocator_type& alloc = allocator_type{}) : json_t(json_ext<std::decay_t<T>>::serialize(std::forward<T>(value)), alloc) { }
     };
 
     namespace json_parser
@@ -519,12 +608,15 @@ namespace nanojson2
         class reader
         {
         public:
+            using allocator_type = typename json_t::allocator_type;
+
             static json_t read_json(
                 character_input_iterator begin,
                 character_input_iterator end,
-                option loose = option::default_option)
+                option loose,
+                const allocator_type& alloc = allocator_type{})
             {
-                return reader(begin, end, loose).execute();
+                return reader(begin, end, loose, alloc).execute();
             }
 
         private:
@@ -598,8 +690,12 @@ namespace nanojson2
             } input_;
 
             option option_bits_{};
+            allocator_type alloc_{};
 
-            reader(character_input_iterator begin, character_input_iterator end, option option) : input_{begin, end}, option_bits_(option) { }
+            reader(character_input_iterator begin, character_input_iterator end, option option, const allocator_type& alloc)
+                : input_{begin, end}
+                , option_bits_(option)
+                , alloc_{alloc} { }
 
             [[nodiscard]] json_t execute()
             {
@@ -622,14 +718,14 @@ namespace nanojson2
                     if (!input_.eat('u')) throw bad_format("invalid 'null' literal: expected 'u'", *input_);
                     if (!input_.eat('l')) throw bad_format("invalid 'null' literal: expected 'l'", *input_);
                     if (!input_.eat('l')) throw bad_format("invalid 'null' literal: expected 'l'", *input_);
-                    return json_t(in_place_index::null_t);
+                    return json_t(in_place_index::null_t, json_t::null_t{}, alloc_);
 
                 case 't': // true
                     if (!input_.eat('t')) throw bad_format("invalid 'true' literal: expected 't'", *input_);
                     if (!input_.eat('r')) throw bad_format("invalid 'true' literal: expected 'r'", *input_);
                     if (!input_.eat('u')) throw bad_format("invalid 'true' literal: expected 'u'", *input_);
                     if (!input_.eat('e')) throw bad_format("invalid 'true' literal: expected 'e'", *input_);
-                    return json_t(in_place_index::bool_t, true);
+                    return json_t(in_place_index::bool_t, true, alloc_);
 
                 case 'f': // false
                     if (!input_.eat('f')) throw bad_format("invalid 'false' literal: expected 'f'", *input_);
@@ -637,7 +733,7 @@ namespace nanojson2
                     if (!input_.eat('l')) throw bad_format("invalid 'false' literal: expected 'l'", *input_);
                     if (!input_.eat('s')) throw bad_format("invalid 'false' literal: expected 's'", *input_);
                     if (!input_.eat('e')) throw bad_format("invalid 'false' literal: expected 'e'", *input_);
-                    return json_t(in_place_index::bool_t, false);
+                    return json_t(in_place_index::bool_t, false, alloc_);
 
                 case '+':
                 case '-':
@@ -794,7 +890,7 @@ namespace nanojson2
                 {
                     json_t::integer_t ret{};
                     auto [ptr, ec] = std::from_chars(buffer, p, ret, 10);
-                    if (ec == std::errc{} && ptr == p) return json_t(in_place_index::integer_t, ret); // integer OK
+                    if (ec == std::errc{} && ptr == p) return json_t(in_place_index::integer_t, ret, alloc_); // integer OK
                 }
 
                 // try to parse as floating type (should succeed)
@@ -815,7 +911,7 @@ namespace nanojson2
 
                     if (ptr == p)
                     {
-                        if (ec == std::errc{}) return json_t(in_place_index::floating_t, ret); // floating OK
+                        if (ec == std::errc{}) return json_t(in_place_index::floating_t, ret, alloc_); // floating OK
 
                         if (ec == std::errc::result_out_of_range)
                         {
@@ -823,17 +919,17 @@ namespace nanojson2
                             {
                                 // overflow
                                 if (buffer[0] != '-')
-                                    return json_t(in_place_index::floating_t, +std::numeric_limits<json_t::floating_t>::infinity());
+                                    return json_t(in_place_index::floating_t, +std::numeric_limits<json_t::floating_t>::infinity(), alloc_);
                                 else
-                                    return json_t(in_place_index::floating_t, -std::numeric_limits<json_t::floating_t>::infinity());
+                                    return json_t(in_place_index::floating_t, -std::numeric_limits<json_t::floating_t>::infinity(), alloc_);
                             }
                             else
                             {
                                 // underflow
                                 if (buffer[0] != '-')
-                                    return json_t(in_place_index::floating_t, static_cast<json_t::floating_t>(+0.0));
+                                    return json_t(in_place_index::floating_t, static_cast<json_t::floating_t>(+0.0), alloc_);
                                 else
-                                    return json_t(in_place_index::floating_t, static_cast<json_t::floating_t>(-0.0));
+                                    return json_t(in_place_index::floating_t, static_cast<json_t::floating_t>(-0.0), alloc_);
                             }
                         }
                     }
@@ -849,7 +945,7 @@ namespace nanojson2
                 assert(*input_ == '"');
                 int_type quote = *input_++; // '"'
 
-                json_t result(in_place_index::string_t);
+                json_t result(in_place_index::string_t, json_t::string_t(alloc_), alloc_);
                 json_t::string_t& ret = *result->as_string();
 
                 while (true)
@@ -942,7 +1038,7 @@ namespace nanojson2
             {
                 if (!input_.eat('[')) throw bad_format("logic error");
 
-                json_t result(in_place_index::array_t);
+                json_t result(in_place_index::array_t, json_t::array_t(alloc_), alloc_);
                 json_t::array_t& ret = *result->as_array();
 
                 eat_whitespaces();
@@ -973,7 +1069,7 @@ namespace nanojson2
             {
                 if (!input_.eat('{')) throw bad_format("logic error");
 
-                json_t result(in_place_index::object_t);
+                json_t result(in_place_index::object_t, json_t::object_t(alloc_), alloc_);
                 json_t::object_t& ret = *result->as_object();
 
                 eat_whitespaces();
@@ -988,7 +1084,7 @@ namespace nanojson2
                         if (*input_ == '"') return read_string();
                         else if (has_option(option::allow_unquoted_object_key))
                         {
-                            json_t k(in_place_index::string_t);
+                            json_t k(in_place_index::string_t, json_t::string_t(alloc_), alloc_);
                             json_t::string_t& t = *k->as_string();
                             while (*input_ != EOF && *input_ > ' ' && *input_ != ':')
                                 t += static_cast<char_type>(*input_++);
@@ -1111,11 +1207,12 @@ namespace nanojson2
         static json_t parse_json(
             character_input_iterator begin,
             character_input_iterator end,
-            option loose = option::default_option)
+            option loose = option::default_option,
+            const json_t::allocator_type& alloc = json_t::allocator_type{})
         {
             return reader<character_input_iterator>::read_json(
                 std::move(begin), std::move(end),
-                loose);
+                loose, alloc);
         }
 
         template <
@@ -1123,12 +1220,13 @@ namespace nanojson2
             std::enable_if_t<std::is_constructible_v<std::istreambuf_iterator<json_t::char_t>, istream&>>* = nullptr>
         static json_t read_json(
             istream& source,
-            option loose = option::default_option)
+            option loose = option::default_option,
+            const json_t::allocator_type& alloc = json_t::allocator_type{})
         {
             return parse_json(
                 std::istreambuf_iterator<json_t::char_t>(source),
                 std::istreambuf_iterator<json_t::char_t>(),
-                loose);
+                loose, alloc);
         }
     }
 
@@ -1451,15 +1549,15 @@ namespace nanojson2
         using option = json_parser::option;
 
         // From stream
-        static json_t read_json(json_istream& source, option opt = option::default_option)
+        static json_t read_json(json_istream& source, option opt = option::default_option, const allocator_type& alloc = {})
         {
-            return json_parser::read_json(source, opt);
+            return json_parser::read_json(source, opt, alloc);
         }
 
         // From string
-        static json_t parse_json(json_string_view_t source, option opt = option::default_option)
+        static json_t parse_json(json_string_view_t source, option opt = option::default_option, const allocator_type& alloc = {})
         {
-            return json_parser::parse_json(source.begin(), source.end(), opt);
+            return json_parser::parse_json(source.begin(), source.end(), opt, alloc);
         }
     };
 
@@ -1474,22 +1572,22 @@ namespace nanojson2
         }
 
         // To string
-        static json_string_t to_json_string(const json_t& json, bool pretty = false, bool debug_dump = false)
+        static json_string_t to_json_string(const json_t& json, bool pretty = false, bool debug_dump = false, const allocator_type& alloc = {})
         {
-            json_string_t result;
+            json_string_t result(alloc);
             json_stringifier::write_json(std::back_inserter(result), json, {}, pretty, debug_dump);
             return result;
         }
     };
 
-    inline json_t json_t::read_json_string(json_istream& src)
+    inline json_t json_t::read_json_string(json_istream& src, const allocator_type& alloc)
     {
-        return json_reader::read_json(src, json_reader::option::default_option);
+        return json_reader::read_json(src, json_reader::option::default_option, alloc);
     }
 
-    inline json_t json_t::parse(const json_string_view_t& source)
+    inline json_t json_t::parse(const json_string_view_t& source, const allocator_type& alloc)
     {
-        return json_reader::parse_json(source, json_reader::option::default_option);
+        return json_reader::parse_json(source, json_reader::option::default_option, alloc);
     }
 
     inline void json_t::write_json_string(json_ostream& dst, bool pretty) const
@@ -1497,9 +1595,9 @@ namespace nanojson2
         json_writer::write_json(dst, *this, pretty);
     }
 
-    inline json_t::json_string_t json_t::to_json_string(bool pretty) const
+    inline json_t::json_string_t json_t::to_json_string(bool pretty, const allocator_type& alloc) const
     {
-        return json_writer::to_json_string(*this, pretty);
+        return json_writer::to_json_string(*this, pretty, false, alloc);
     }
 
     ////
