@@ -457,18 +457,15 @@ namespace nanojson2
 
     public:
         // extensive constructors
-
         template <class T, class U = void> struct json_ext;
 
         // copy construct
         template <class T, std::void_t<decltype(json_ext<std::decay_t<const T&>>::serialize(std::declval<const T&>()))>* = nullptr>
-        json_t(const T& value)
-            : json_t(json_ext<std::decay_t<const T&>>::serialize(value)) { }
+        json_t(const T& value) : json_t(json_ext<std::decay_t<const T&>>::serialize(std::forward<const T>(value))) { }
 
         // move construct
         template <class T, std::enable_if_t<std::is_rvalue_reference_v<T>, std::void_t<decltype(json_ext<std::decay_t<T>>::serialize(std::declval<T>()))>>* = nullptr>
-        json_t(T&& value)
-            : json_t(json_ext<std::decay_t<T>>::serialize(std::forward<T>(value))) { }
+        json_t(T&& value) : json_t(json_ext<std::decay_t<T>>::serialize(std::forward<T>(value))) { }
     };
 
     namespace json_parser
@@ -1490,11 +1487,12 @@ namespace nanojson2
     }
 
     // built-in ext ctor for primitives.
-    template <class T> struct json_t::json_ext<T, std::enable_if_t<std::is_pointer_v<T>>> : json_ext_ctor_helper::prevent_conversion { };                      // prevent `bool` constructor by pointer types
-    template <class T> struct json_t::json_ext<T, std::enable_if_t<std::is_integral_v<T>>> : json_ext_ctor_helper::static_cast_to_value<integer_t> { };        // map all integral types (`char`, `int`, `unsigned long`, ...) to `int_t`: hint: this is also true for `bool`, but concrete constructor `json_t(bool)` is selected in the real calling situation
-    template <class T> struct json_t::json_ext<T, std::enable_if_t<std::is_floating_point_v<T>>> : json_ext_ctor_helper::static_cast_to_value<floating_t> { }; // map all floating point types (`float`, `double`, ...) to `float_t` (`std::is_floating_point<T>`)
-    template <> struct json_t::json_ext<const json_t::char_t*> : json_ext_ctor_helper::pass_to_value_ctor<string_t> { };                                       // map `const char*` to `string_t`
-    template <> struct json_t::json_ext<json_t::string_view_t> : json_ext_ctor_helper::pass_to_value_ctor<string_t> { };                                       // map `std::string_view` to `string_t`
+    template <class T> struct json_t::json_ext<T, std::enable_if_t<std::is_pointer_v<T>>> : json_ext_ctor_helper::prevent_conversion { };                                        // prevent `bool` constructor by pointer types
+    template <class T> struct json_t::json_ext<T, std::enable_if_t<std::is_integral_v<T>>> : json_ext_ctor_helper::static_cast_to_value<integer_t> { };                          // map all integral types (`char`, `int`, `unsigned long`, ...) to `int_t`: hint: this is also true for `bool`, but concrete constructor `json_t(bool)` is selected in the real calling situation
+    template <class T> struct json_t::json_ext<T, std::enable_if_t<std::is_floating_point_v<T>>> : json_ext_ctor_helper::static_cast_to_value<floating_t> { };                   // map all floating point types (`float`, `double`, ...) to `float_t` (`std::is_floating_point<T>`)
+    template <> struct json_t::json_ext<const json_t::char_t*> : json_ext_ctor_helper::pass_to_value_ctor<string_t> { };                                                         // map `const char*` to `string_t`
+    template <> struct json_t::json_ext<std::basic_string_view<json_t::char_t, std::char_traits<json_t::char_t>>> : json_ext_ctor_helper::pass_to_value_ctor<string_t> { };      // map `std::string_view` to `string_t`
+    template <class A> struct json_t::json_ext<std::basic_string<json_t::char_t, std::char_traits<json_t::char_t>, A>> : json_ext_ctor_helper::pass_to_value_ctor<string_t> { }; // map `std::string` to `string_t`
 
     // built-in ext ctor for array_t: map some STL container`<T>` to `array_t`, if `T` is convertible json_t.
     template <class U> struct json_t::json_ext<std::initializer_list<U>, std::enable_if_t<std::is_constructible_v<json_t, U>>> : json_ext_ctor_helper::pass_iterator_pair_to_value_ctor<array_t> { };                           // map `std::initializer_list<T>` to `array_t`
@@ -1512,37 +1510,71 @@ namespace nanojson2
     };
 
     // built-in ext ctor for object_t: map some STL container`<K, T>` to `object_t`, if `K` is convertible string and `T` is convertible json_t.
-    template <class K, class U, class P, class A> struct json_t::json_ext<std::map<K, U, P, A>, std::enable_if_t<std::is_convertible_v<K, json_t::object_t::key_type> && std::is_constructible_v<json_t, U>>> : json_ext_ctor_helper::pass_iterator_pair_to_value_ctor<object_t> { };           // map `std::map<K, T>` to `object_t`
-    template <class K, class U, class P, class A> struct json_t::json_ext<std::unordered_map<K, U, P, A>, std::enable_if_t<std::is_convertible_v<K, json_t::object_t::key_type> && std::is_constructible_v<json_t, U>>> : json_ext_ctor_helper::pass_iterator_pair_to_value_ctor<object_t> { }; // map `std::unordered_map<K, T>` to `object_t`
+    template <class K, class U, class P, class A> struct json_t::json_ext<std::map<K, U, P, A>, std::enable_if_t<std::is_convertible_v<K, json_t::object_key_view_t> && std::is_constructible_v<json_t, U>>> : json_ext_ctor_helper::pass_iterator_pair_to_value_ctor<object_t> { };           // map `std::map<K, T>` to `object_t`
+    template <class K, class U, class P, class A> struct json_t::json_ext<std::unordered_map<K, U, P, A>, std::enable_if_t<std::is_convertible_v<K, json_t::object_key_view_t> && std::is_constructible_v<json_t, U>>> : json_ext_ctor_helper::pass_iterator_pair_to_value_ctor<object_t> { }; // map `std::unordered_map<K, T>` to `object_t`
 
     // built-in ext ctor for to_json types: some types which has `to_json()` function to `json_t`
 
-    // member function `string to_json() const;`
+    // If `T` has a member function `json_t to_json() const;`:
     template <class T>
-    struct json_t::json_ext<T, std::enable_if_t<std::is_invocable_r_v<json_t::json_string_t, decltype(&T::to_json), const T&>>>
+    struct json_t::json_ext<
+            T,
+            std::enable_if_t<
+                std::is_same_v<std::invoke_result_t<decltype(&T::to_json), const T&>, json_t>
+            >>
     {
-        static json_t serialize(const T& val) { return json_t::parse(val.to_json()); }
+        static json_t serialize(const T& val)
+        {
+            return val.to_json();
+        }
     };
 
-    // member function `json_t to_json() const;`
+    // else If `T` has the member function `R to_json() const;` where `R` is convertible to json_string_view:
     template <class T>
-    struct json_t::json_ext<T, std::enable_if_t<std::is_same_v<std::invoke_result_t<decltype(&T::to_json), const T&>, json_t>>>
+    struct json_t::json_ext<
+            T,
+            std::enable_if_t<
+                !std::is_same_v<std::invoke_result_t<decltype(&T::to_json), const T&>, json_t> &&
+                std::is_convertible_v<std::invoke_result_t<decltype(&T::to_json), const T&>, json_t::json_string_view_t>
+            >>
     {
-        static json_t serialize(const T& val) { return val.to_json(); }
+        static json_t serialize(const T& val)
+        {
+            return json_t::parse(val.to_json());
+        }
     };
 
-    // function `string to_json(T);` by global/ADL
+    // else If there is the global/ADL function `json_t to_json(T);`:
     template <class T>
-    struct json_t::json_ext<T, std::enable_if_t<!std::is_invocable_r_v<json_t::json_string_t, decltype(&T::to_json), const T&> && std::is_invocable_r_v<json_t::json_string_t, decltype(to_json(std::declval<T>())), const T&>>>
+    struct json_t::json_ext<
+            T,
+            std::enable_if_t<
+                !std::is_same_v<std::invoke_result_t<decltype(&T::to_json), const T&>, json_t> &&
+                !std::is_convertible_v<std::invoke_result_t<decltype(&T::to_json), const T&>, json_t::json_string_view_t> &&
+                std::is_same_v<std::invoke_result_t<decltype(to_json(std::declval<T>())), const T&>, json_t>
+            >>
     {
-        static json_t serialize(const T& val) { return json_t::parse(to_json(val)); }
+        static json_t serialize(const T& val)
+        {
+            return to_json(val);
+        }
     };
 
-    // function `json_t to_json(T);` by global/ADL
+    // else If there is the global/ADL function `R to_json(T);` where `R` is convertible to json_string_view:
     template <class T>
-    struct json_t::json_ext<T, std::enable_if_t<!std::is_same_v<std::invoke_result_t<decltype(&T::to_json), const T&>, json_t> && std::is_same_v<std::invoke_result_t<decltype(to_json(std::declval<T>())), const T&>, json_t>>>
+    struct json_t::json_ext<
+            T,
+            std::enable_if_t<
+                !std::is_same_v<std::invoke_result_t<decltype(&T::to_json), const T&>, json_t> &&
+                !std::is_convertible_v<std::invoke_result_t<decltype(&T::to_json), const T&>, json_t::json_string_view_t> &&
+                !std::is_same_v<std::invoke_result_t<decltype(to_json(std::declval<T>())), const T&>, json_t> &&
+                std::is_convertible_v<std::invoke_result_t<decltype(to_json(std::declval<T>()))>, json_t::json_string_view_t>
+            >>
     {
-        static json_t serialize(const T& val) { return to_json(val); }
+        static json_t serialize(const T& val)
+        {
+            return json_t::parse(to_json(val));
+        }
     };
 
 
