@@ -152,16 +152,6 @@ namespace nanojson2
             bool operator ==(const json_value_t& rhs) const noexcept { return value_ == rhs.value_; }
             bool operator !=(const json_value_t& rhs) const noexcept { return value_ != rhs.value_; }
 
-            // pointer to value
-            template <class T>
-            struct pointer
-            {
-                T* const pointer_{};
-                T& operator *() const { return pointer_ ? *pointer_ : throw bad_access(); }
-                T* operator ->() const { return pointer_ ? pointer_ : throw bad_access(); }
-                explicit operator bool() const noexcept { return pointer_; }
-            };
-
             [[nodiscard]] type_index get_type() const noexcept { return static_cast<type_index>(value_.index()); }
 
             template <class T> [[nodiscard]] bool is() const noexcept { return std::holds_alternative<T>(value_); }
@@ -175,23 +165,23 @@ namespace nanojson2
             [[nodiscard]] bool is_array() const noexcept { return is<array_t>(); }
             [[nodiscard]] bool is_object() const noexcept { return is<object_t>(); }
 
-            template <class T> [[nodiscard]] pointer<const T> as() const noexcept { return pointer<const T>{std::get_if<T>(&value_)}; }
-            [[nodiscard]] pointer<const null_t> as_null() const noexcept { return as<null_t>(); }
-            [[nodiscard]] pointer<const bool_t> as_bool() const noexcept { return as<bool_t>(); }
-            [[nodiscard]] pointer<const integer_t> as_integer() const noexcept { return as<integer_t>(); }
-            [[nodiscard]] pointer<const floating_t> as_floating() const noexcept { return as<floating_t>(); }
-            [[nodiscard]] pointer<const string_t> as_string() const noexcept { return as<string_t>(); }
-            [[nodiscard]] pointer<const array_t> as_array() const noexcept { return as<array_t>(); }
-            [[nodiscard]] pointer<const object_t> as_object() const noexcept { return as<object_t>(); }
+            template <class T> [[nodiscard]] const T* as() const noexcept { return std::get_if<T>(&value_); }
+            [[nodiscard]] const null_t* as_null() const noexcept { return as<null_t>(); }
+            [[nodiscard]] const bool_t* as_bool() const noexcept { return as<bool_t>(); }
+            [[nodiscard]] const integer_t* as_integer() const noexcept { return as<integer_t>(); }
+            [[nodiscard]] const floating_t* as_floating() const noexcept { return as<floating_t>(); }
+            [[nodiscard]] const string_t* as_string() const noexcept { return as<string_t>(); }
+            [[nodiscard]] const array_t* as_array() const noexcept { return as<array_t>(); }
+            [[nodiscard]] const object_t* as_object() const noexcept { return as<object_t>(); }
 
-            template <class T> [[nodiscard]] pointer<T> as() noexcept { return pointer<T>{std::get_if<T>(&value_)}; }
-            [[nodiscard]] pointer<null_t> as_null() noexcept { return as<null_t>(); }
-            [[nodiscard]] pointer<bool_t> as_bool() noexcept { return as<bool_t>(); }
-            [[nodiscard]] pointer<integer_t> as_integer() noexcept { return as<integer_t>(); }
-            [[nodiscard]] pointer<floating_t> as_floating() noexcept { return as<floating_t>(); }
-            [[nodiscard]] pointer<string_t> as_string() noexcept { return as<string_t>(); }
-            [[nodiscard]] pointer<array_t> as_array() noexcept { return as<array_t>(); }
-            [[nodiscard]] pointer<object_t> as_object() noexcept { return as<object_t>(); }
+            template <class T> [[nodiscard]] T* as() noexcept { return std::get_if<T>(&value_); }
+            [[nodiscard]] null_t* as_null() noexcept { return as<null_t>(); }
+            [[nodiscard]] bool_t* as_bool() noexcept { return as<bool_t>(); }
+            [[nodiscard]] integer_t* as_integer() noexcept { return as<integer_t>(); }
+            [[nodiscard]] floating_t* as_floating() noexcept { return as<floating_t>(); }
+            [[nodiscard]] string_t* as_string() noexcept { return as<string_t>(); }
+            [[nodiscard]] array_t* as_array() noexcept { return as<array_t>(); }
+            [[nodiscard]] object_t* as_object() noexcept { return as<object_t>(); }
 
             template <class T> [[nodiscard]] const T& get() const { return *as<T>(); }
             [[nodiscard]] null_t get_null() const { return *as<null_t>(); }
@@ -376,7 +366,7 @@ namespace nanojson2
                         if (key < a->size())
                             return json_node_ref_t{normal_pointer{&a->operator[](key)}}; // normal reference
                         else
-                            return json_node_ref_t{array_write_pointer{a.pointer_, key}}; // write only virtual reference
+                            return json_node_ref_t{array_write_pointer{a, key}}; // write only virtual reference
                     }
                 }
 
@@ -392,7 +382,7 @@ namespace nanojson2
                         if (const auto it = o->find(key); it != o->end())
                             return json_node_ref_t{normal_pointer{&it->second}}; // normal reference
                         else
-                            return json_node_ref_t{object_write_pointer(o.pointer_, object_t::key_type(key))}; // write only virtual reference
+                            return json_node_ref_t{object_write_pointer(o, object_t::key_type(key))}; // write only virtual reference
                     }
                 }
 
