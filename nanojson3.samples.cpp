@@ -27,7 +27,7 @@ void sample_code_snippets()
     std::cout << std::fixed;
 
     //  ### 🌟 Simple iostream/string i/o interface.
-    std::cout << json_ios_pretty << json_t::parse(R"([123, 456, "abc"])") << "\n";
+    std::cout << json_ios_pretty << json::parse(R"([123, 456, "abc"])") << "\n";
     //[
     //  123,
     //  456,
@@ -38,7 +38,7 @@ void sample_code_snippets()
         std::stringstream cin{R"([123, 456, "abc"])"};
         std::istream& istream = cin; // std::cin
 
-        json_t json;
+        json json;
         istream >> json;                      // parse input
         std::cout << json_ios_pretty << json; // output pretty
     }
@@ -94,13 +94,13 @@ void sample_code_snippets()
     // ### 🌟 Basic Read/Write Access To Json Object
     {
         // 👇 Sample Input
-        json_t json = json_reader::parse_json(
+        json json = json_reader::parse_json(
             R""(
 {
     "null_literal" : null,
     "bool_true" : true,
     "bool_false" : false,
-    "integer" : 1234567890123456789, // parsed to integer_t 1234567890123456789
+    "integer" : 1234567890123456789, // parsed to js_integer 1234567890123456789
     "float1" : 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890, // parsed to float_t 1.234568e+119
     "float2" : 1.234567e+89, // parsed to float_t 1.234567e+89,
     "strings" : {
@@ -141,8 +141,8 @@ void sample_code_snippets()
         //  }
 
         //  Note
-        //  - json object is implemented by `std::map<string_t, json_t>` internally, so its properties are sorted by key.
-        //  - Numbers into `integer_t (long long)` or `float_t (long double)` type by value.
+        //  - json object is implemented by `std::map<js_string, json_t>` internally, so its properties are sorted by key.
+        //  - Numbers into `js_integer (long long)` or `float_t (long double)` type by value.
 
         //  👇 And that `json` object can be accessed by `operator[]` and `operator->` ...
 
@@ -162,17 +162,17 @@ void sample_code_snippets()
 
         // Reading access:
 
-        integer_t integer = json["integer"]->get_integer(); // OK
-        //floating_t integer = json["integer"]->get_floating(); // throws bad_access (type mismatch)
+        js_integer integer = json["integer"]->get_integer(); // OK
+        //js_floating integer = json["integer"]->get_floating(); // throws bad_access (type mismatch)
         std::cout << DEBUG_OUTPUT(integer);
 
-        floating_t float1 = json["float1"]->get_floating(); // OK
-        //integer_t float1 = json["float1"]->get_integer();   // throws bad_access (type mismatch)
+        js_floating float1 = json["float1"]->get_floating(); // OK
+        //js_integer float1 = json["float1"]->get_integer();   // throws bad_access (type mismatch)
         std::cout << DEBUG_OUTPUT(float1);
 
-        floating_t integer_as_number = json["integer"]->get_number(); // OK (converted to floating_t)
-        floating_t float1_as_number = json["float1"]->get_number();   // OK
-        floating_t float2_as_number = json["float2"]->get_number();   // OK
+        js_floating integer_as_number = json["integer"]->get_number(); // OK (converted to js_floating)
+        js_floating float1_as_number = json["float1"]->get_number();   // OK
+        js_floating float2_as_number = json["float2"]->get_number();   // OK
         std::cout << DEBUG_OUTPUT(integer_as_number);
         std::cout << DEBUG_OUTPUT(float1_as_number);
         std::cout << DEBUG_OUTPUT(float2_as_number);
@@ -216,8 +216,8 @@ void sample_code_snippets()
     //  ### 🌟 Making JSON Values From Scratch
     {
         // Makes array from values
-        json_t json = array_t{1, 2, 3, "a", true, false, 4.5, nullptr};
-        if (auto a = json->as_array()) // gets array_t interface (is simply std::vector<json_t>
+        json json = js_array{1, 2, 3, "a", true, false, 4.5, nullptr};
+        if (auto a = json->as_array()) // gets js_array interface (is simply std::vector<json_t>
         {
             a->push_back(123);
             a->push_back("abc");
@@ -225,16 +225,16 @@ void sample_code_snippets()
         std::cout << json_ios_pretty << json << std::endl;
     }
     {
-        json_t json = object_t{
+        json json = js_object{
             {"a", 1},
             {"b", 2},
-            {"c", array_t{"X", "Y", "Z", 1, 2, 3}},
+            {"c", js_array{"X", "Y", "Z", 1, 2, 3}},
         };
-        if (auto a = json->as_object()) // gets object_t interface (is simply std::map<string_t, json_t>)
+        if (auto a = json->as_object()) // gets js_object interface (is simply std::map<js_string, json_t>)
         {
             a->insert_or_assign("d", 12345);
             a->insert_or_assign("e", "abc");
-            a->insert_or_assign("f", object_t{{"f1", 123}, {"f2", 456}, {"f3", 789},});
+            a->insert_or_assign("f", js_object{{"f1", 123}, {"f2", 456}, {"f3", 789},});
         }
         std::cout << json_ios_pretty << json << std::endl;
     }
@@ -243,7 +243,7 @@ void sample_code_snippets()
     //  👇 Let's serialize STL containers into `json_t`.
     {
         // Makes array of array from STL containers
-        json_t json = std::vector<std::vector<float>>
+        json json = std::vector<std::vector<float>>
         {
             {1, 2, 3},
             {4, 5, 6},
@@ -262,8 +262,8 @@ void sample_code_snippets()
     }
 
     {
-        // std::map<string, ...> is converted json_t::object_t
-        json_t json = std::map<std::string, int>{{"a", 1}, {"b", 2}};
+        // std::map<string, ...> is converted json_t::js_object
+        json json = std::map<std::string, int>{{"a", 1}, {"b", 2}};
         std::cout << json_ios_pretty << json << std::endl;
         // makes { "a": 1, "b": 2 }
     }
@@ -281,7 +281,7 @@ void sample_code_snippets()
             [[nodiscard]] std::string to_json() const
             {
                 using namespace nanojson3;
-                return json_t(object_t{
+                return json(js_object{
                     {"title", title},
                     {"value", value},
                 }).to_json_string();
@@ -295,19 +295,19 @@ void sample_code_snippets()
         //    - string to_json(s); 
         //    - json_t to_json(s);
 
-        json_t test = custom_struct{"the answer", 42};
+        json test = custom_struct{"the answer", 42};
         std::cout << DEBUG_OUTPUT(test);
 
         // Mix use with json_convertible objects.
-        json_t json = std::array<custom_struct, 2>{
+        json json1 = std::array<custom_struct, 2>{
             {
                 {"the answer", 42},
                 {"the answer squared", 42 * 42},
             }
         };
-        // std::array of json convertible type is converted into json_t::array_t
+        // std::array of json convertible type is converted into json_t::js_array
 
-        auto ref = json->as_array(); // get array_t interface (is simply std::vector<json_t>)
+        auto ref = json1->as_array(); // get js_array interface (is simply std::vector<json_t>)
         ref->emplace_back(custom_struct{"the answer is", 43});
         ref->emplace_back(custom_struct{"the answer is", 44});
         ref->emplace_back(custom_struct{"the answer is", 45});
@@ -319,10 +319,10 @@ void sample_code_snippets()
         //      {"title": "the answer is", "value": 44},
         //      {"title": "the answer is", "value": 45}
         //  ]
-        std::cout << json_ios_pretty << DEBUG_OUTPUT(json);
+        std::cout << json_ios_pretty << DEBUG_OUTPUT(json1);
 
         // tuple is converted into array
-        json_t json2 = std::tuple<int, double, custom_struct>{42, 42.195, {"hello", 12345}};
+        json json2 = std::tuple<int, double, custom_struct>{42, 42.195, {"hello", 12345}};
         std::cout << json_ios_pretty << DEBUG_OUTPUT(json2);
         // makes
         // [
@@ -343,19 +343,19 @@ void sample_code_snippets()
 //  ### 🌟 Adding User-defined Json Importer (User-defined json_t Constructor Extension)
 //  The nanojson provides constructor extension interface.
 //  
-//  This is an additional json importer which converts `std::tuple<...>` into `array_t`. (defined in nanojson2.h)
+//  This is an additional json importer which converts `std::tuple<...>` into `js_array`. (defined in nanojson2.h)
 //  ```cpp
 //
 //      template <class...U>
 //      struct json_t::json_ext<
 //          std::tuple<U...>,
 //          std::void_t<json_ext_ctor_val_type_for_t<U>...>
-//          > // map std::tuple to array_t
+//          > // map std::tuple to js_array
 //  	{
-//  		static array_t serialize(const std::tuple<U...>& val) {
+//  		static js_array serialize(const std::tuple<U...>& val) {
 //              return std::apply(
 //                  [](auto&& ...x) {
-//                      return array_t{{json_t(std::forward<decltype(x)>(x))...}};
+//                      return js_array{{json_t(std::forward<decltype(x)>(x))...}};
 //                  },
 //                  std::forward<decltype(val)>(val));
 //          }
@@ -369,7 +369,7 @@ void sample_code_snippets()
 //     // U is placeholder for void_t in specializations. (for std::enable_if_t or std::void_t)
 //  ```
 //  
-//  Your task is implementing `static TYPE serialize(T) { ... }` which returns any of json types `null_t`, `integer_t`, `floating_t`, `string_t`, `array_t`, `object_t`, or `json_t` or another json convertible type.
+//  Your task is implementing `static TYPE serialize(T) { ... }` which returns any of json types `js_null`, `js_integer`, `js_floating`, `js_string`, `js_array`, `js_object`, or `json_t` or another json convertible type.
 //  
 //  If `json_t(T)` constructor can find out that specialization, type `T` can be convertible to json by `json_t` constructor.
 
@@ -389,26 +389,26 @@ struct Matrix3x3f final
 
 // json constructor extension for `Vector3f`
 template <>
-struct nanojson3::json_t::json_ext<Vector3f>
+struct nanojson3::json::json_ext<Vector3f>
 {
     static auto serialize(const Vector3f& val)
     {
-        //*/ // Serialize Vector3f into `object_t`
-        return object_t
+        //*/ // Serialize Vector3f into `js_object`
+        return js_object
         {
             {"x", val.x},
             {"y", val.y},
             {"z", val.z},
         };
-        /*/ // or simply `array_t`.
-        return array_t{ val.x, val.y, val.z };
+        /*/ // or simply `js_array`.
+        return js_array{ val.x, val.y, val.z };
         //*/
     }
 };
 
 // json constructor extension for `Matrix3x3f`
 template <>
-struct nanojson3::json_t::json_ext<Matrix3x3f>
+struct nanojson3::json::json_ext<Matrix3x3f>
 {
     static auto serialize(const Matrix3x3f& val)
     {
@@ -424,12 +424,12 @@ void fixed_user_defined_types()
     using namespace nanojson3;
 
     Vector3f input = {1.0f, 2.0f, 3.0f};
-    json_t json_from_vector3f = input; // Convert Vector3f into json by `json_ext<Vector3f>`
+    json json_from_vector3f = input; // Convert Vector3f into json by `json_ext<Vector3f>`
     std::cout << std::fixed << DEBUG_OUTPUT(json_from_vector3f);
     // makes output like {"x":1.0000,"y":2.0000,"z":3.0000}.
 
     // With other json convertible containers.
-    json_t json_from_matrix3x3f = std::vector<Matrix3x3f>{
+    json json_from_matrix3x3f = std::vector<Matrix3x3f>{
         {
             {1.0f, 2.0f, 3.0f},
             {4.0f, 5.0f, 6.0f},
@@ -459,20 +459,20 @@ void fixed_user_defined_types()
 //    - prevent `bool` constructor by pointer types (`std::is_pointer<T>`)
 //    - map all integral types (`char`, `int`, `unsigned long`, ...) to `int_t` (`std::is_integral<T>`)
 //    - map all floating point types (`float`, `double`, ...) to `float_t` (`std::is_floating_point<T>`)
-//    - map `const char*` to `string_t`
-//    - map `std::string_view` to `string_t`
-//  - built-in ext ctor for array_t: map some STL container`<T>` to `array_t`, if `T` is convertible json.
-//    - map `std::initializer_list<T>` to `array_t`
-//    - map `std::vector<T>` to `array_t`
-//    - map `std::array<T, n>` to `array_t`
-//    - map `std::set<T>` to `array_t`
-//    - map `std::multiset<T>` to `array_t`
-//    - map `std::unordered_set<T>` to `array_t`
-//    - map `std::unordered_multiset<T>` to `array_t`
-//    - map `std::tuple<T...>` to `array_t`
-//  - built-in ext ctor for object_t: map some STL container`<K, T>` to `object_t`, if `K` is convertible string and `T` is convertible json.
-//    - map `std::map<K, T>` to `object_t`
-//    - map `std::unordered_map<K, T>` to `object_t`
+//    - map `const char*` to `js_string`
+//    - map `std::string_view` to `js_string`
+//  - built-in ext ctor for js_array: map some STL container`<T>` to `js_array`, if `T` is convertible json.
+//    - map `std::initializer_list<T>` to `js_array`
+//    - map `std::vector<T>` to `js_array`
+//    - map `std::array<T, n>` to `js_array`
+//    - map `std::set<T>` to `js_array`
+//    - map `std::multiset<T>` to `js_array`
+//    - map `std::unordered_set<T>` to `js_array`
+//    - map `std::unordered_multiset<T>` to `js_array`
+//    - map `std::tuple<T...>` to `js_array`
+//  - built-in ext ctor for js_object: map some STL container`<K, T>` to `js_object`, if `K` is convertible string and `T` is convertible json.
+//    - map `std::map<K, T>` to `js_object`
+//    - map `std::unordered_map<K, T>` to `js_object`
 //  - built-in ext ctor for to_json types: some types which has `to_json()` function to `json_t`
 //    - enable_if `T` has `string T::to_json() const;`
 //    - enable_if `T` has `nanojson2::json_t T::to_json() const;`
@@ -505,7 +505,7 @@ static void more_test()
     using namespace nanojson3;
     try
     {
-        for (auto i : json_t::parse(R"(
+        for (auto i : json::parse(R"(
 [
 1,
 1234567890,
