@@ -336,8 +336,8 @@ void sample_code_snippets()
     fixed_user_defined_types();
 }
 
-//  ### 🌟 Adding User-defined Json Serializer (User-defined json Constructor Extension)
-//  The nanojson provides constructor extension interface.
+//  ### 🌟 Adding User-defined JSON Serializer (User-defined JSON Constructor Plug-in system)
+//  The nanojson provides constructor plug-in interface.
 
 //  👇 Here are unchangeable `Vector3f` and `Matrix3x3f` provided by another library.
 namespace foobar_library

@@ -404,8 +404,8 @@ std::cout << njs3::json_out_pretty << json << std::endl;
 
 
 
-### 🌟 Adding User-defined JSON Serializer (User-defined JSON Constructor Extension)
-The nanojson provides constructor extension interface.
+### 🌟 Adding User-defined JSON Serializer (User-defined JSON Constructor Plug-in system)
+The nanojson provides constructor plug-in interface.
 
 
 👇 Here are unchangeable `Vector3f` and `Matrix3x3f` provided by another library.
@@ -516,11 +516,9 @@ void fixed_user_defined_types()
 ```
 
 
-### 🌟 Built-in Json serializer extensions
+### 🌟 Built-in json_serializer plug-ins
 
-The nanojson provides some built-in specializations and helper classes (in `nanojson3.h`).
-
-The importing functions for STL objects described above are implemented as constructor extensions.
+Some json_serializer are implemented as built-in:
 
   - built-in `json_serializer` for primitives:
     - map all integral types (except `char`) to `js_integer`
