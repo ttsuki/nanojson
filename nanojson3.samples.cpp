@@ -22,7 +22,7 @@ void sample_code_snippets()
 {
     //  ## 🌟 Sample Code Snippets
     //  😃 Here, some snippets may be useful to learn usage of this library.
-    using namespace nanojson3;
+    using namespace njs3;
 
     std::cout << std::fixed;
 
@@ -280,7 +280,6 @@ void sample_code_snippets()
             // returns json-formatted string (or simply nanojson3::json)
             [[nodiscard]] std::string to_json() const
             {
-                using namespace nanojson3;
                 return json(js_object{
                     {"title", title},
                     {"value", value},
@@ -375,11 +374,11 @@ namespace foobar_library
 // Let `json_serializer<Vector3f>` as
 //
 template <>
-struct nanojson3::json_serializer<foobar_library::Vector3f>
+struct njs3::json_serializer<foobar_library::Vector3f>
 {
     static json serialize(const foobar_library::Vector3f& val)
     {
-        return js_object
+        return njs3::js_object
         {
             {"x", val.x},
             {"y", val.y},
@@ -403,7 +402,7 @@ namespace foobar_library
 
 void fixed_user_defined_types()
 {
-    using namespace nanojson3;
+    using namespace njs3;
     const foobar_library::Vector3f input = {1.0f, 2.0f, 3.0f};
 
     // Convert Vector3f into json by `json_serializer<Vector3f>`

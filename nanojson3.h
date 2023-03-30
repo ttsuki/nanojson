@@ -1670,11 +1670,6 @@ namespace nanojson3
     using ios::json_ios_option;
     using ios::operator <<;
     using ios::operator >>;
-    static constexpr auto json_in_strict = json_ios_option(json_parse_option::none);
-    static constexpr auto json_in_default = json_ios_option(json_parse_option::default_option);
-    static constexpr auto json_in_loose = json_ios_option(json_parse_option::all);
-    static constexpr auto json_out_pretty = json_ios_option(json_serialize_option::pretty);
-
 
     // json_serializer specializations
 
@@ -1797,19 +1792,52 @@ namespace nanojson3
     {
         template <class U> static json serialize(U&& val) { return to_json(std::forward<U>(val)); }
     };
+}
 
-    // type exports
-    using js_undefined = json::js_undefined;
-    using js_null = json::js_null;
-    using js_boolean = json::js_boolean;
-    using js_integer = json::js_integer;
-    using js_floating = json::js_floating;
-    using js_number = json::js_number;
-    using js_string = json::js_string;
-    using js_array = json::js_array;
-    using js_object = json::js_object;
+// utilized namespace
+namespace njs3
+{
+    using json = nanojson3::json;
+    using json_string = nanojson3::json::json_string;
 
-    using json_string = json::json_string;
-    using json_string_view = json::json_string_view;
+    using js_undefined = nanojson3::json::js_undefined;
+    using js_null = nanojson3::json::js_null;
+    using js_boolean = nanojson3::json::js_boolean;
+    using js_integer = nanojson3::json::js_integer;
+    using js_floating = nanojson3::json::js_floating;
+    using js_number = nanojson3::json::js_number;
+    using js_string = nanojson3::json::js_string;
+    using js_array_index = nanojson3::json::js_array_index;
+    using js_array = nanojson3::json::js_array;
+    using js_object_key = nanojson3::json::js_object_key;
+    using js_object_kvp = nanojson3::json::js_object_kvp;
+    using js_object = nanojson3::json::js_object;
+
+    using json_string_view = nanojson3::json::json_string_view;
+    using js_string_view = nanojson3::json::js_string_view;
+    using js_array_index_view = nanojson3::json::js_array_index_view;
+    using js_object_key_view = nanojson3::json::js_object_key_view;
+
+    inline namespace exceptions
+    {
+        using namespace nanojson3::exceptions;
+    }
+
+    using json_parse_option = nanojson3::json_parse_option;
+    using json_serialize_option = nanojson3::json_serialize_option;
+    using json_floating_format_options = nanojson3::json_floating_format_options;
+    using nanojson3::io::parse_json;
+    using nanojson3::io::serialize_json;
+
+    inline namespace ios
+    {
+        using nanojson3::ios::json_ios_option;
+        static constexpr auto json_in_strict = json_ios_option(json_parse_option::none);
+        static constexpr auto json_in_default = json_ios_option(json_parse_option::default_option);
+        static constexpr auto json_in_loose = json_ios_option(json_parse_option::all);
+        static constexpr auto json_out_pretty = json_ios_option(json_serialize_option::pretty);
+    }
+
+    using nanojson3::json_serializer;
 }
 #endif
