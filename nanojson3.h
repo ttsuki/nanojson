@@ -281,13 +281,13 @@ namespace nanojson3
         };
 
         /// bad_format: represents FAILED to decode from json string.
-        struct bad_format : nanojson_exception
+        struct bad_format final : nanojson_exception
         {
             using nanojson_exception::nanojson_exception;
         };
 
         /// bad_value: represents FAILED to encode to json string.
-        struct bad_value : nanojson_exception
+        struct bad_value final : nanojson_exception
         {
             using nanojson_exception::nanojson_exception;
         };
