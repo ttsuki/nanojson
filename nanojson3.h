@@ -329,10 +329,11 @@ namespace nanojson3
     /// json: represents a json element
     class json final
     {
-    public: // type set definition
+    public:
+        // types
+
         using char_type = char;
         using char_traits = std::char_traits<char_type>;
-
         using allocator_type = std::allocator<char_type>;
         using allocator_traits = std::allocator_traits<allocator_type>;
         template <class U> using allocator_type_for = typename allocator_traits::template rebind_alloc<U>;
@@ -366,6 +367,7 @@ namespace nanojson3
 
         private:
             friend class json;
+
             json_value() = default;
             json_value(const json_value& other) = default;
             json_value(json_value&& other) noexcept = default;
@@ -377,12 +379,14 @@ namespace nanojson3
             json_value& operator=(const json_value& other) = default;
             json_value& operator=(json_value&& other) noexcept = default;
 
+            ~json_value() = default;
+
         public:
             bool operator ==(const json_value& rhs) const noexcept { return value_ == rhs.value_; }
             bool operator !=(const json_value& rhs) const noexcept { return value_ != rhs.value_; }
 
             [[nodiscard]] json_type_index get_type() const noexcept { return static_cast<json_type_index>(value_.index()); }
-            const js_variant& as_variant() const { return value_; }
+            [[nodiscard]] const js_variant& as_variant() const noexcept { return value_; }
 
             template <class T> [[nodiscard]] bool is() const noexcept { return std::holds_alternative<T>(value_); }
             [[nodiscard]] bool is_defined() const noexcept { return !is<js_undefined>(); }
@@ -395,6 +399,7 @@ namespace nanojson3
             [[nodiscard]] bool is_array() const noexcept { return is<js_array>(); }
             [[nodiscard]] bool is_object() const noexcept { return is<js_object>(); }
 
+            // returns nullptr if type is mismatch
             template <class T> [[nodiscard]] const T* as() const noexcept { return std::get_if<T>(&value_); }
             [[nodiscard]] const js_null* as_null() const noexcept { return as<js_null>(); }
             [[nodiscard]] const js_boolean* as_bool() const noexcept { return as<js_boolean>(); }
@@ -404,6 +409,7 @@ namespace nanojson3
             [[nodiscard]] const js_array* as_array() const noexcept { return as<js_array>(); }
             [[nodiscard]] const js_object* as_object() const noexcept { return as<js_object>(); }
 
+            // returns nullptr if type is mismatch
             template <class T> [[nodiscard]] T* as() noexcept { return std::get_if<T>(&value_); }
             [[nodiscard]] js_null* as_null() noexcept { return as<js_null>(); }
             [[nodiscard]] js_boolean* as_bool() noexcept { return as<js_boolean>(); }
@@ -413,32 +419,36 @@ namespace nanojson3
             [[nodiscard]] js_array* as_array() noexcept { return as<js_array>(); }
             [[nodiscard]] js_object* as_object() noexcept { return as<js_object>(); }
 
-            template <class T> [[nodiscard]] const T& get() const { return *as<T>(); }
-            [[nodiscard]] js_null get_null() const { return *as<js_null>(); }
-            [[nodiscard]] js_boolean get_bool() const { return *as<js_boolean>(); }
-            [[nodiscard]] js_integer get_integer() const { return *as<js_integer>(); }
-            [[nodiscard]] js_floating get_floating() const { return *as<js_floating>(); }
-            [[nodiscard]] js_string get_string() const { return *as<js_string>(); }
-            [[nodiscard]] js_array get_array() const { return *as<js_array>(); }
-            [[nodiscard]] js_object get_object() const { return *as<js_object>(); }
+            // throws bad_access if type is mismatch
+            template <class T> [[nodiscard]] T get() const { return as<T>() ? *as<T>() : throw bad_access(); }
+            [[nodiscard]] js_null get_null() const { return get<js_null>(); }
+            [[nodiscard]] js_boolean get_bool() const { return get<js_boolean>(); }
+            [[nodiscard]] js_integer get_integer() const { return get<js_integer>(); }
+            [[nodiscard]] js_floating get_floating() const { return get<js_floating>(); }
+            [[nodiscard]] js_string get_string() const { return get<js_string>(); }
+            [[nodiscard]] js_array get_array() const { return get<js_array>(); }
+            [[nodiscard]] js_object get_object() const { return get<js_object>(); }
 
+            // returns default_value if type is mismatch
             template <class T, class U, std::enable_if_t<std::is_convertible_v<U&&, T>>* = nullptr> [[nodiscard]] T get_or(U&& default_value) const noexcept { return as<T>() ? *as<T>() : static_cast<T>(std::forward<U>(default_value)); }
-            [[nodiscard]] js_null get_null_or(js_null default_value) const noexcept { return this->get_or<js_null>(default_value); }
-            [[nodiscard]] js_boolean get_bool_or(js_boolean default_value) const noexcept { return this->get_or<js_boolean>(default_value); }
-            [[nodiscard]] js_integer get_integer_or(js_integer default_value) const noexcept { return this->get_or<js_integer>(default_value); }
-            [[nodiscard]] js_floating get_floating_or(js_floating default_value) const noexcept { return this->get_or<js_floating>(default_value); }
-            [[nodiscard]] js_string get_string_or(const js_string& default_value) const noexcept { return this->get_or<js_string>(default_value); }
-            [[nodiscard]] js_string get_string_or(js_string&& default_value) const noexcept { return this->get_or<js_string>(std::move(default_value)); }
-            [[nodiscard]] js_array get_array_or(const js_array& default_value) const noexcept { return this->get_or<js_array>(default_value); }
-            [[nodiscard]] js_array get_array_or(js_array&& default_value) const noexcept { return this->get_or<js_array>(std::move(default_value)); }
-            [[nodiscard]] js_object get_object_or(const js_object& default_value) const noexcept { return this->get_or<js_object>(default_value); }
-            [[nodiscard]] js_object get_object_or(js_object&& default_value) const noexcept { return this->get_or<js_object>(std::move(default_value)); }
+            [[nodiscard]] js_null get_null_or(js_null default_value) const noexcept { return get_or<js_null>(default_value); }
+            [[nodiscard]] js_boolean get_bool_or(js_boolean default_value) const noexcept { return get_or<js_boolean>(default_value); }
+            [[nodiscard]] js_integer get_integer_or(js_integer default_value) const noexcept { return get_or<js_integer>(default_value); }
+            [[nodiscard]] js_floating get_floating_or(js_floating default_value) const noexcept { return get_or<js_floating>(default_value); }
+            [[nodiscard]] js_string get_string_or(const js_string& default_value) const noexcept { return get_or<js_string>(default_value); }
+            [[nodiscard]] js_string get_string_or(js_string&& default_value) const noexcept { return get_or<js_string>(std::move(default_value)); }
+            [[nodiscard]] js_array get_array_or(const js_array& default_value) const noexcept { return get_or<js_array>(default_value); }
+            [[nodiscard]] js_array get_array_or(js_array&& default_value) const noexcept { return get_or<js_array>(std::move(default_value)); }
+            [[nodiscard]] js_object get_object_or(const js_object& default_value) const noexcept { return get_or<js_object>(default_value); }
+            [[nodiscard]] js_object get_object_or(js_object&& default_value) const noexcept { return get_or<js_object>(std::move(default_value)); }
 
+            // (integer or floating) as floating
             [[nodiscard]] bool is_number() const noexcept
             {
                 return is<js_integer>() || is<js_floating>();
             }
 
+            // (integer or floating) as floating
             [[nodiscard]] std::optional<js_number> as_number() const noexcept
             {
                 if (const auto num = as<js_integer>()) return std::optional<js_number>(std::in_place, static_cast<js_floating>(*num));
@@ -446,35 +456,35 @@ namespace nanojson3
                 return std::optional<js_number>{};
             }
 
+            // (integer or floating) as floating
             [[nodiscard]] js_number get_number() const
             {
-                if (as<js_integer>()) return static_cast<js_number>(get_integer());
-                if (as<js_floating>()) return static_cast<js_number>(get_floating());
+                if (const auto num = as_number()) return *num;
                 throw bad_access();
             }
 
+            // (integer or floating) as floating
             template <class U, std::enable_if_t<std::is_convertible_v<U&&, js_number>>* = nullptr>
             [[nodiscard]] js_number get_number_or(U&& default_value) const
             {
-                if (as<js_integer>()) return static_cast<js_number>(get_integer());
-                if (as<js_floating>()) return static_cast<js_number>(get_floating());
+                if (const auto num = as_number()) return *num;
                 return static_cast<js_number>(std::forward<U>(default_value));
             }
         };
 
     private:
-        json_value value_;
-
+        json_value value_{};
 
     public:
         // constructors
-        json() = default;
+        json() { }
         json(const json& other) = default;
         json(json&& other) noexcept = default;
         json& operator=(const json& other) = default;
         json& operator=(json&& other) noexcept = default;
 
-        template <json_type_index type_index, class...Args> json(in_place_index_t<type_index> index, Args&&...args) : value_(index, std::forward<Args>(args)...) { }
+        template <json_type_index type_index, class... Args>
+        json(in_place_index_t<type_index> index, Args&&... args) : value_(index, std::forward<Args>(args)...) { }
 
         json(const js_undefined& value) : json(in_place_index::undefined, std::forward<decltype(value)>(value)) { }
         json(const js_null& value) : json(in_place_index::null, std::forward<decltype(value)>(value)) { }
@@ -497,189 +507,143 @@ namespace nanojson3
         ~json() = default;
 
     public:
-        [[nodiscard]] static const json& make_undefined_reference() noexcept
+        // undefined_reference
+        [[nodiscard]] static const json& undefined_reference() noexcept
         {
             static json undefined{js_undefined{}};
             return undefined;
         }
 
     public:
-        // value
+        // value access operators
+        [[nodiscard]] const json_value& value() const noexcept { return value_; }
+        [[nodiscard]] const json_value& operator *() const noexcept { return value(); }
+        [[nodiscard]] const json_value* operator ->() const noexcept { return &value(); }
+        [[nodiscard]] json_value& value() noexcept { return value_; }
+        [[nodiscard]] json_value& operator *() noexcept { return value(); }
+        [[nodiscard]] json_value* operator ->() noexcept { return &value(); }
 
-        [[nodiscard]] const json_value& value() const noexcept { return value_; } // 
-        [[nodiscard]] json_value& value() noexcept { return value_; }             //
-        const json_value& operator *() const noexcept { return value(); }         //
-        const json_value* operator ->() const noexcept { return &value(); }       //
-        json_value& operator *() noexcept { return value(); }                     //
-        json_value* operator ->() noexcept { return &value(); }                   //
+        // array/object index operators
 
-    public:
-        // children
-        const json& operator[](js_array_index key) const noexcept
+        using const_node_reference = const json&;
+        struct node_reference;
+
+        const_node_reference operator[](js_array_index key) const noexcept
         {
             if (const auto a = value().as_array())
                 if (key < a->size())
                     return a->operator[](key);
 
-            return make_undefined_reference();
+            return undefined_reference();
         }
 
-        const json& operator[](js_object_key_view key) const noexcept
+        const_node_reference operator[](js_object_key_view key) const noexcept
         {
             if (const auto o = value().as_object())
                 if (const auto it = o->find(key); it != o->end())
                     return it->second;
 
-            return make_undefined_reference();
+            return undefined_reference();
         }
-
-        bool operator ==(const json& rhs) const noexcept { return this->value() == rhs.value(); }
-        bool operator !=(const json& rhs) const noexcept { return this->value() != rhs.value(); }
-
-        struct node_reference;
-        using const_node_reference = const json&;
 
         struct node_reference final
         {
-            using null_pointer = std::monostate;
+            using undefined_pointer = std::monostate;
             using normal_pointer = json*;
-            using const_pointer = const json*;
             using array_write_pointer = std::pair<js_array*, js_array::size_type>;
             using object_write_pointer = std::pair<js_object*, js_object::key_type>;
-            using pointer = std::variant<null_pointer, normal_pointer, array_write_pointer, object_write_pointer>;
+            using pointer = std::variant<undefined_pointer, normal_pointer, array_write_pointer, object_write_pointer>;
 
-        private:
-            pointer pointer_{};
-
-        public:
             node_reference(pointer p) : pointer_(std::move(p)) { }
-
+            node_reference(json& r) : pointer_(std::in_place_type<normal_pointer>, &r) { }
             node_reference(const node_reference& other) = delete;
             node_reference(node_reference&& other) noexcept = delete;
             node_reference& operator=(const node_reference& other) = delete;
             node_reference& operator=(node_reference&& other) noexcept = delete;
             ~node_reference() = default;
 
-            [[nodiscard]] const json_value& value() const noexcept
+            [[nodiscard]] json_value& value() const noexcept
             {
-                if (auto p = std::get_if<normal_pointer>(&pointer_))
-                    return (*p)->value();
-
-                return make_undefined_reference().value();
+                if (const normal_pointer* p = std::get_if<normal_pointer>(&pointer_)) return (*p)->value();
+                return const_cast<json_value&>(undefined_reference().value()); // assumes the value type can't be changed from json_value_t interface.
             }
 
-            [[nodiscard]] json_value& value() noexcept
-            {
-                if (auto p = std::get_if<normal_pointer>(&pointer_))
-                    return (*p)->value();
+            [[nodiscard]] json_value& operator *() const noexcept { return value(); }
+            [[nodiscard]] json_value* operator ->() const noexcept { return &value(); }
 
-                // assumes the value type can't be changed from json_value interface.
-                return const_cast<json_value&>(make_undefined_reference().value());
-            }
-
-            const json_value& operator *() const noexcept { return value(); }
-            const json_value* operator ->() const noexcept { return &value(); }
-            json_value& operator *() noexcept { return value(); }
-            json_value* operator ->() noexcept { return &value(); }
-
-            const_node_reference operator [](js_array_index key) const noexcept
-            {
-                if (const const_pointer* p = std::get_if<normal_pointer>(&pointer_))
-                    return (*p)->operator[](key);
-
-                return make_undefined_reference();
-            }
-
-            const_node_reference operator [](js_object_key_view key) const noexcept
-            {
-                if (const const_pointer* p = std::get_if<normal_pointer>(&pointer_))
-                    return (*p)->operator[](key);
-
-                return make_undefined_reference();
-            }
-
-            node_reference operator [](js_array_index key) noexcept
+            [[nodiscard]] node_reference operator [](js_array_index key) const noexcept
             {
                 if (const normal_pointer* p = std::get_if<normal_pointer>(&pointer_))
                 {
                     if (const auto a = (*p)->value().as_array())
                     {
                         if (key < a->size())
-                            return node_reference{normal_pointer{&a->operator[](key)}}; // normal reference
+                            return pointer(std::in_place_type<normal_pointer>, &a->operator[](key)); // normal reference
                         else
-                            return node_reference{array_write_pointer{a, key}}; // write only virtual reference
+                            return pointer(std::in_place_type<array_write_pointer>, a, key); // write only reference
                     }
                 }
 
-                return node_reference{null_pointer{}};
+                return pointer{undefined_pointer{}};
             }
 
-            node_reference operator [](js_object_key_view key) noexcept
+            [[nodiscard]] node_reference operator [](js_object_key_view key) const noexcept
             {
                 if (const normal_pointer* p = std::get_if<normal_pointer>(&pointer_))
                 {
                     if (const auto o = (*p)->value().as_object())
                     {
                         if (const auto it = o->find(key); it != o->end())
-                            return node_reference{normal_pointer{&it->second}}; // normal reference
+                            return pointer(std::in_place_type<normal_pointer>, &it->second); // normal reference
                         else
-                            return node_reference{object_write_pointer(o, js_object::key_type(key))}; // write only virtual reference
+                            return pointer{std::in_place_type<object_write_pointer>, o, js_object::key_type(key)}; // write only reference
                     }
                 }
 
-                return node_reference{null_pointer{}};
+                return pointer{undefined_pointer{}};
             }
 
+            // assign operator
             json& operator =(json value)
             {
-                if (normal_pointer* p = std::get_if<normal_pointer>(&pointer_))
+                if (normal_pointer* pn = std::get_if<normal_pointer>(&pointer_))
                 {
-                    return **p = json(std::move(value));
+                    return **pn = std::move(value);
                 }
-
-                if (array_write_pointer* p = std::get_if<array_write_pointer>(&pointer_))
+                else if (array_write_pointer* pa = std::get_if<array_write_pointer>(&pointer_))
                 {
-                    auto& [array, index] = *p;
-
-                    if (index >= array->size())
-                        array->resize(index + 1);
-
-                    json& r = array->at(index) = std::move(value);
+                    auto [a, i] = *pa;
+                    if (i >= a->size()) a->resize(i + 1);
+                    json& r = a->operator[](i) = std::move(value);
                     pointer_ = normal_pointer{&r}; // update pointer to real instance
                     return r;
                 }
-
-                if (object_write_pointer* p = std::get_if<object_write_pointer>(&pointer_))
+                else if (object_write_pointer* po = std::get_if<object_write_pointer>(&pointer_))
                 {
-                    auto& [object, key] = *p;
-                    json& r = object->insert_or_assign(std::move(key), std::move(value)).first->second;
+                    auto [o, k] = *po;
+                    json& r = o->insert_or_assign(std::move(k), std::move(value)).first->second;
                     pointer_ = normal_pointer{&r}; // update pointer to real instance
                     return r;
                 }
-
-                throw bad_access();
+                else throw bad_access(); // can't write to undefined node
             }
 
             bool operator ==(const node_reference& rhs) const noexcept { return this->value() == rhs.value(); }
             bool operator !=(const node_reference& rhs) const noexcept { return this->value() != rhs.value(); }
             bool operator ==(const_node_reference rhs) const noexcept { return this->value() == rhs.value(); }
             bool operator !=(const_node_reference rhs) const noexcept { return this->value() != rhs.value(); }
+
+        private:
+            pointer pointer_{};
         };
 
-        node_reference operator[](js_array_index index) noexcept
-        {
-            auto ref = node_reference{node_reference::normal_pointer{this}};
-            return ref[index];
-        }
+        [[nodiscard]] node_reference operator[](js_array_index index) noexcept { return node_reference(*this)[index]; }
+        [[nodiscard]] node_reference operator[](js_object_key_view key) noexcept { return node_reference(*this)[key]; }
 
-        node_reference operator[](js_object_key_view key) noexcept
-        {
-            auto ref = node_reference{node_reference::normal_pointer{this}};
-            return ref[key];
-        }
-
-        bool operator ==(const node_reference& rhs) const noexcept { return this->value() == rhs.value(); }
-        bool operator !=(const node_reference& rhs) const noexcept { return this->value() != rhs.value(); }
+        [[nodiscard]] bool operator ==(const node_reference& rhs) const noexcept { return this->value() == rhs.value(); }
+        [[nodiscard]] bool operator !=(const node_reference& rhs) const noexcept { return this->value() != rhs.value(); }
+        [[nodiscard]] bool operator ==(const_node_reference rhs) const noexcept { return this->value() == rhs.value(); }
+        [[nodiscard]] bool operator !=(const_node_reference rhs) const noexcept { return this->value() != rhs.value(); }
 
     public:
         // i/o
@@ -1760,9 +1724,9 @@ namespace nanojson3
 
     // built-in ext ctor for primitives.
     template <class T> struct json::json_ext<T, std::enable_if_t<std::is_pointer_v<T>>> : json_ext_ctor_helper::prevent_conversion { };                           // prevent `bool` constructor by pointer types
-    template <class T> struct json::json_ext<T, std::enable_if_t<std::is_integral_v<T>>> : json_ext_ctor_helper::static_cast_to_value<js_integer> { };             // map all integral types (`char`, `int`, `unsigned long`, ...) to `int_t`: hint: this is also true for `bool`, but concrete constructor `json_t(bool)` is selected in the real calling situation
-    template <class T> struct json::json_ext<T, std::enable_if_t<std::is_floating_point_v<T>>> : json_ext_ctor_helper::static_cast_to_value<js_floating> { };      // map all floating point types (`float`, `double`, ...) to `float_t` (`std::is_floating_point<T>`)
-    template <> struct json::json_ext<const json::char_type*> : json_ext_ctor_helper::pass_to_value_ctor<js_string> { };                                            // map `const char*` to `string_t`
+    template <class T> struct json::json_ext<T, std::enable_if_t<std::is_integral_v<T>>> : json_ext_ctor_helper::static_cast_to_value<js_integer> { };            // map all integral types (`char`, `int`, `unsigned long`, ...) to `int_t`: hint: this is also true for `bool`, but concrete constructor `json_t(bool)` is selected in the real calling situation
+    template <class T> struct json::json_ext<T, std::enable_if_t<std::is_floating_point_v<T>>> : json_ext_ctor_helper::static_cast_to_value<js_floating> { };     // map all floating point types (`float`, `double`, ...) to `float_t` (`std::is_floating_point<T>`)
+    template <> struct json::json_ext<const json::char_type*> : json_ext_ctor_helper::pass_to_value_ctor<js_string> { };                                          // map `const char*` to `string_t`
     template <> struct json::json_ext<std::basic_string_view<json::char_type, json::char_traits>> : json_ext_ctor_helper::pass_to_value_ctor<js_string> { };      // map `std::string_view` to `string_t`
     template <class A> struct json::json_ext<std::basic_string<json::char_type, json::char_traits, A>> : json_ext_ctor_helper::pass_to_value_ctor<js_string> { }; // map `std::string` to `string_t`
 
@@ -1775,10 +1739,10 @@ namespace nanojson3
     template <class U, class P, class A> struct json::json_ext<std::unordered_set<U, P, A>, std::enable_if_t<std::is_constructible_v<json, U>>> : json_ext_ctor_helper::pass_iterator_pair_to_value_ctor<js_array> { };      // map `std::unordered_set<T>` to `array_t`
     template <class U, class P, class A> struct json::json_ext<std::unordered_multiset<U, P, A>, std::enable_if_t<std::is_constructible_v<json, U>>> : json_ext_ctor_helper::pass_iterator_pair_to_value_ctor<js_array> { }; // map `std::unordered_multiset<T>` to `array_t`
 
-    template <class...U> struct json::json_ext<std::tuple<U...>, std::enable_if_t<std::conjunction_v<std::is_constructible<json, U>...>>> // map `std::tuple<T...>` to `array_t`
+    template <class... U> struct json::json_ext<std::tuple<U...>, std::enable_if_t<std::conjunction_v<std::is_constructible<json, U>...>>> // map `std::tuple<T...>` to `array_t`
     {
-        static js_array serialize(const std::tuple<U...>& val) { return std::apply([](auto&& ...x) { return js_array{{json(std::forward<decltype(x)>(x))...}}; }, std::forward<decltype(val)>(val)); }
-        static js_array serialize(std::tuple<U...>&& val) { return std::apply([](auto&& ...x) { return js_array{{json(std::forward<decltype(x)>(x))...}}; }, std::forward<decltype(val)>(val)); }
+        static js_array serialize(const std::tuple<U...>& val) { return std::apply([](auto&&... x) { return js_array{{json(std::forward<decltype(x)>(x))...}}; }, std::forward<decltype(val)>(val)); }
+        static js_array serialize(std::tuple<U...>&& val) { return std::apply([](auto&&... x) { return js_array{{json(std::forward<decltype(x)>(x))...}}; }, std::forward<decltype(val)>(val)); }
     };
 
     // built-in ext ctor for object_t: map some STL container`<K, T>` to `object_t`, if `K` is convertible string and `T` is convertible json_t.
