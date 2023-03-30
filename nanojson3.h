@@ -326,6 +326,51 @@ namespace nanojson3
         static constexpr inline in_place_index_t<json_type_index::object> object{};
     };
 
+    enum struct json_parse_option : unsigned long
+    {
+        none = 0,
+        allow_utf8_bom = 1ul << 0,
+        allow_unescaped_forward_slash = 1ul << 1,
+        allow_comment = 1ul << 2,
+        allow_trailing_comma = 1ul << 3,
+        allow_unquoted_object_key = 1ul << 4,
+        allow_number_with_plus_sign = 1ul << 5,
+        all = ~0u,
+
+        // default_option
+        default_option = allow_utf8_bom | allow_unescaped_forward_slash,
+    };
+
+    static inline constexpr json_parse_option operator |(json_parse_option lhs, json_parse_option rhs) { return static_cast<json_parse_option>(static_cast<std::underlying_type_t<json_parse_option>>(lhs) | static_cast<std::underlying_type_t<json_parse_option>>(rhs)); }
+    static inline constexpr json_parse_option operator &(json_parse_option lhs, json_parse_option rhs) { return static_cast<json_parse_option>(static_cast<std::underlying_type_t<json_parse_option>>(lhs) & static_cast<std::underlying_type_t<json_parse_option>>(rhs)); }
+    static inline constexpr json_parse_option operator ^(json_parse_option lhs, json_parse_option rhs) { return static_cast<json_parse_option>(static_cast<std::underlying_type_t<json_parse_option>>(lhs) ^ static_cast<std::underlying_type_t<json_parse_option>>(rhs)); }
+    static inline constexpr json_parse_option& operator |=(json_parse_option& lhs, json_parse_option rhs) { return lhs = lhs | rhs; }
+    static inline constexpr json_parse_option& operator &=(json_parse_option& lhs, json_parse_option rhs) { return lhs = lhs & rhs; }
+    static inline constexpr json_parse_option& operator ^=(json_parse_option& lhs, json_parse_option rhs) { return lhs = lhs ^ rhs; }
+
+    enum struct json_serialize_option : unsigned long
+    {
+        none = 0,
+        pretty = 1ul << 0,
+        debug_dump_type_as_comment = 1ul << 31,
+
+        // default_option
+        default_option = none,
+    };
+
+    static inline constexpr json_serialize_option operator |(json_serialize_option lhs, json_serialize_option rhs) { return static_cast<json_serialize_option>(static_cast<std::underlying_type_t<json_serialize_option>>(lhs) | static_cast<std::underlying_type_t<json_serialize_option>>(rhs)); }
+    static inline constexpr json_serialize_option operator &(json_serialize_option lhs, json_serialize_option rhs) { return static_cast<json_serialize_option>(static_cast<std::underlying_type_t<json_serialize_option>>(lhs) & static_cast<std::underlying_type_t<json_serialize_option>>(rhs)); }
+    static inline constexpr json_serialize_option operator ^(json_serialize_option lhs, json_serialize_option rhs) { return static_cast<json_serialize_option>(static_cast<std::underlying_type_t<json_serialize_option>>(lhs) ^ static_cast<std::underlying_type_t<json_serialize_option>>(rhs)); }
+    static inline constexpr json_serialize_option& operator |=(json_serialize_option& lhs, json_serialize_option rhs) { return lhs = lhs | rhs; }
+    static inline constexpr json_serialize_option& operator &=(json_serialize_option& lhs, json_serialize_option rhs) { return lhs = lhs & rhs; }
+    static inline constexpr json_serialize_option& operator ^=(json_serialize_option& lhs, json_serialize_option rhs) { return lhs = lhs ^ rhs; }
+
+    struct json_floating_format_options
+    {
+        std::chars_format floating_format = std::chars_format::general; // general, fixed, scientific
+        int floating_precision = 7;
+    };
+
     /// json: represents a json element
     class json final
     {
@@ -647,17 +692,11 @@ namespace nanojson3
 
     public:
         // i/o
-        class json_reader;
-        class json_writer;
+        template <class CharInputIterator> struct json_reader;
+        template <class CharOutputIterator> struct json_writer;
 
-        // i/o
-        using json_istream = std::basic_istream<char_type>;
-        [[nodiscard]] static json read_json_string(json_istream& src);
-        [[nodiscard]] static json parse(const json_string_view& source);
-
-        using json_ostream = std::basic_ostream<char_type>;
-        void write_json_string(json_ostream& dst, bool pretty = false) const;
-        [[nodiscard]] json_string to_json_string(bool pretty = false) const;
+        [[nodiscard]] static json parse(const json_string_view& source, json_parse_option opt = json_parse_option::default_option);
+        [[nodiscard]] json_string serialize(json_serialize_option opt = json_serialize_option::none, json_floating_format_options format = json_floating_format_options{}) const;
 
     public:
         // extensive constructors
@@ -672,1016 +711,874 @@ namespace nanojson3
         json(T&& value) : json(json_ext<std::decay_t<T>>::serialize(std::forward<T>(value))) { }
     };
 
-    namespace json_parser
+    template <class CharInputIterator>
+    struct json::json_reader
     {
-        enum struct option : unsigned long
+    public:
+        static json read_json(CharInputIterator begin, CharInputIterator end, json_parse_option loose_option)
         {
-            none = 0,
-            allow_utf8_bom = 1ul << 0,
-            allow_unescaped_forward_slash = 1ul << 1,
-            allow_comment = 1ul << 2,
-            allow_trailing_comma = 1ul << 3,
-            allow_unquoted_object_key = 1ul << 4,
-            allow_number_with_plus_sign = 1ul << 5,
-            all = ~0u,
+            return json_reader(begin, end, loose_option).execute();
+        }
 
-            // default_option
-            default_option = allow_utf8_bom | allow_unescaped_forward_slash,
-        };
+    private:
+        using char_traits = typename json::char_traits;
+        using char_type = typename char_traits::char_type;
+        using int_type = typename char_traits::int_type;
 
-        static inline constexpr option operator |(option lhs, option rhs) { return static_cast<option>(static_cast<std::underlying_type_t<option>>(lhs) | static_cast<std::underlying_type_t<option>>(rhs)); }
-        static inline constexpr option operator &(option lhs, option rhs) { return static_cast<option>(static_cast<std::underlying_type_t<option>>(lhs) & static_cast<std::underlying_type_t<option>>(rhs)); }
-        static inline constexpr option operator ^(option lhs, option rhs) { return static_cast<option>(static_cast<std::underlying_type_t<option>>(lhs) ^ static_cast<std::underlying_type_t<option>>(rhs)); }
-        static inline constexpr option& operator |=(option& lhs, option rhs) { return lhs = lhs | rhs; }
-        static inline constexpr option& operator &=(option& lhs, option rhs) { return lhs = lhs & rhs; }
-        static inline constexpr option& operator ^=(option& lhs, option rhs) { return lhs = lhs ^ rhs; }
-
-        template <class character_input_iterator>
-        class reader
+        struct input_stream
         {
-        public:
-            static json read_json(
-                character_input_iterator begin,
-                character_input_iterator end,
-                option loose = option::default_option)
+            CharInputIterator it_;
+            CharInputIterator const end_;
+
+            size_t current_position_char_{};
+            int current_position_line_{};
+            int current_position_column_{};
+
+            // peeks current character
+            [[nodiscard]] int_type peek() const
             {
-                return reader(begin, end, loose).execute();
+                return it_ != end_ ? char_traits::to_int_type(*it_) : char_traits::eof();
             }
 
-        private:
-            using char_traits = typename json::char_traits;
-            using char_type = typename char_traits::char_type;
-            using int_type = typename char_traits::int_type;
-
-            struct source_reader
+            // eats a character
+            [[nodiscard]] int_type eat()
             {
-                character_input_iterator it_;
-                character_input_iterator const end_;
+                const int_type i = peek();
+                if (it_ != end_) ++it_;
 
-                size_t current_position_char_{};
-                int current_position_line_{};
-                int current_position_column_{};
-
-                [[nodiscard]] int_type peek() const
+                if (i != EOF)
                 {
-                    return it_ != end_
-                               ? char_traits::to_int_type(*it_)
-                               : char_traits::eof();
-                }
+                    current_position_char_++;
 
-                [[nodiscard]] int_type eat()
-                {
-                    const int_type i = peek();
-                    if (it_ != end_) ++it_;
-
-                    if (i != EOF)
+                    current_position_column_++;
+                    if (i == '\n')
                     {
-                        current_position_char_++;
-
-                        current_position_column_++;
-                        if (i == '\n')
-                        {
-                            current_position_line_++;
-                            current_position_column_ = 0;
-                        }
+                        current_position_line_++;
+                        current_position_column_ = 0;
                     }
-
-                    return i;
                 }
 
-                [[nodiscard]] bool eat(int_type chr)
-                {
-                    return peek() == chr
-                               ? (void)eat(), true
-                               : false;
-                }
-
-                int_type operator *() const
-                {
-                    return peek();
-                }
-
-                source_reader& operator ++()
-                {
-                    return (void)eat(), *this;
-                }
-
-                auto operator ++(int)
-                {
-                    struct iter
-                    {
-                        int_type value;
-                        int_type operator *() const { return value; }
-                    };
-
-                    return iter{eat()};
-                }
-            } input_;
-
-            option option_bits_{};
-
-            reader(character_input_iterator begin, character_input_iterator end, option option) : input_{begin, end}, option_bits_(option) { }
-
-            [[nodiscard]] json execute()
-            {
-                eat_utf8bom();
-                eat_whitespaces();
-                return read_element();
+                return i;
             }
 
-            [[nodiscard]] bool has_option(option bit) const noexcept
+            // eats if current character is `chr`
+            [[nodiscard]] bool eat(int_type chr)
             {
-                return (option_bits_ & bit) != option::none;
+                return peek() == chr ? (void)eat(), true : false;
             }
 
-            json read_element()
+            int_type operator *() const
             {
-                switch (*input_)
-                {
-                case 'n': // null
-                    if (!input_.eat('n')) throw bad_format("invalid 'null' literal: expected 'n'", *input_);
-                    if (!input_.eat('u')) throw bad_format("invalid 'null' literal: expected 'u'", *input_);
-                    if (!input_.eat('l')) throw bad_format("invalid 'null' literal: expected 'l'", *input_);
-                    if (!input_.eat('l')) throw bad_format("invalid 'null' literal: expected 'l'", *input_);
-                    return json(in_place_index::null);
-
-                case 't': // true
-                    if (!input_.eat('t')) throw bad_format("invalid 'true' literal: expected 't'", *input_);
-                    if (!input_.eat('r')) throw bad_format("invalid 'true' literal: expected 'r'", *input_);
-                    if (!input_.eat('u')) throw bad_format("invalid 'true' literal: expected 'u'", *input_);
-                    if (!input_.eat('e')) throw bad_format("invalid 'true' literal: expected 'e'", *input_);
-                    return json(in_place_index::boolean, true);
-
-                case 'f': // false
-                    if (!input_.eat('f')) throw bad_format("invalid 'false' literal: expected 'f'", *input_);
-                    if (!input_.eat('a')) throw bad_format("invalid 'false' literal: expected 'a'", *input_);
-                    if (!input_.eat('l')) throw bad_format("invalid 'false' literal: expected 'l'", *input_);
-                    if (!input_.eat('s')) throw bad_format("invalid 'false' literal: expected 's'", *input_);
-                    if (!input_.eat('e')) throw bad_format("invalid 'false' literal: expected 'e'", *input_);
-                    return json(in_place_index::boolean, false);
-
-                case '+':
-                case '-':
-                case '0':
-                case '1':
-                case '2':
-                case '3':
-                case '4':
-                case '5':
-                case '6':
-                case '7':
-                case '8':
-                case '9':
-                    return read_number();
-
-                case '"':
-                    return read_string();
-
-                case '[':
-                    return read_array();
-
-                case '{':
-                    return read_object();
-
-                default:
-                    break;
-                }
-
-                throw bad_format("invalid json format: expected an element", *input_);
+                return peek();
             }
 
-            json read_number()
+            input_stream& operator ++()
             {
-                constexpr auto is_digit = [](int_type i)-> bool { return i >= '0' && i <= '9'; }; // locale-independent is_digit
-
-                char_type buffer[128]{};
-                char_type* p = buffer;
-                char_type* const integer_limit = buffer + 48;
-                char_type* const fraction_limit = buffer + 64;
-                char_type* const decimal_limit = buffer + 128;
-                long long exp_offset = 0;
-                bool integer_type = true;
-
-                // parse integer part
-                {
-                    if (input_.eat('-')) { *p++ = '-'; }                                       // minus sign
-                    if (has_option(option::allow_number_with_plus_sign) && input_.eat('+')) {} // ignore plus sign
-
-                    if (input_.eat('0')) { *p++ = '0'; } // put '0', leading zeros are not allowed in JSON.
-                    else if (is_digit(*input_))          // not zero
-                    {
-                        while (is_digit(*input_))
-                            if (p < integer_limit) *p++ = static_cast<char_type>(*input_++);               // put digit
-                            else if (exp_offset < std::numeric_limits<int>::max()) ++exp_offset, ++input_; // drop digit
-                            else throw bad_format("invalid number format: too long integer sequence");
-                    }
-                    else throw bad_format("invalid number format: expected a digit", *input_);
-                }
-
-                if (input_.eat('.')) // accept fraction point part
-                {
-                    assert(p < fraction_limit);
-                    *p++ = '.'; // put decimal point
-                    integer_type = false;
-
-                    if (is_digit(*input_))
-                    {
-                        // if integer part is zero (parse '-0.0000...ddd')
-                        if ((buffer[0] == '0') || (buffer[0] == '-' && buffer[1] == '0'))
-                        {
-                            while (*input_ == '0')
-                                if (exp_offset > std::numeric_limits<int>::lowest()) --exp_offset, ++input_; // drop '0'
-                                else throw bad_format("invalid number format: too long integer sequence");
-                        }
-
-                        while (is_digit(*input_))
-                        {
-                            if (p < fraction_limit) *p++ = static_cast<char_type>(*input_++); // put digit
-                            else ++input_;                                                    // drop digit
-                        }
-                    }
-                    else throw bad_format("invalid number format: expected a digit", *input_);
-                }
-
-                if (*input_ == 'e' || *input_ == 'E') // accept exponential part
-                {
-                    ++input_; // 'e'
-                    integer_type = false;
-
-                    char_type exp_part[32]{};
-                    char_type* exp = exp_part;
-                    char_type* const exp_limit = exp_part + std::size(exp_part);
-
-                    // read
-
-                    if (input_.eat('-')) { *exp++ = '-'; }
-                    else if (input_.eat('+')) {} // drop '+'
-
-                    if (is_digit(*input_))
-                    {
-                        while (is_digit(*input_))
-                        {
-                            if (exp < exp_limit) *exp++ = static_cast<char_type>(*input_++); // put digit
-                            else ++input_;                                                   // drop digit (it must be overflow, handle later)
-                        }
-                    }
-                    else throw bad_format("invalid number format: expected a digit", *input_);
-
-                    // parse
-
-                    long long exp_value{};
-                    auto [ptr, ec] = std::from_chars(exp_part, exp, exp_value, 10);
-
-                    if (ec == std::errc{} && ptr == exp)
-                    {
-                        // OK
-                        constexpr auto add_sat = [](auto a, auto b)-> decltype(a + b)
-                        {
-                            if (a > 0 && b > std::numeric_limits<decltype(a + b)>::max() - a) return std::numeric_limits<decltype(a + b)>::max();
-                            if (a < 0 && b < std::numeric_limits<decltype(a + b)>::lowest() - a) return std::numeric_limits<decltype(a + b)>::lowest();
-                            return a + b;
-                        };
-
-                        exp_offset = add_sat(exp_offset, exp_value);
-                    }
-                    else if (ec == std::errc::result_out_of_range && ptr == exp)
-                    {
-                        // overflow
-                        exp_offset = exp_part[0] == '-'
-                                         ? std::numeric_limits<decltype(exp_offset)>::lowest()
-                                         : std::numeric_limits<decltype(exp_offset)>::max();
-                    }
-                    else
-                    {
-                        assert(false);
-                        throw bad_format("invalid number format: unexpected parse error "); // unexpected
-                    }
-                }
-
-                if (exp_offset != 0)
-                {
-                    integer_type = false;
-
-                    assert(p < decimal_limit);
-                    if (p < decimal_limit) *p++ = 'e';
-
-                    auto [ptr, ec] = std::to_chars(p, decimal_limit, exp_offset, 10);
-                    if (ec != std::errc{}) throw bad_format("invalid number format: unexpected error.");
-                    p = ptr;
-                }
-
-                // try to parse as integer type
-                if (integer_type)
-                {
-                    json::js_integer ret{};
-                    auto [ptr, ec] = std::from_chars(buffer, p, ret, 10);
-                    if (ec == std::errc{} && ptr == p) return json(in_place_index::integer, ret); // integer OK
-                }
-
-                // try to parse as floating type (should succeed)
-                {
-                    json::js_floating ret{};
-#if (defined(__cpp_lib_to_chars) && __cpp_lib_to_chars >= 201611L) // compiler has floating-point from_chars
-                    auto [ptr, ec] = std::from_chars(buffer, p, ret);
-#else // use fallback implementation
-                    std::istringstream tmp{std::string(buffer, p)};
-                    tmp.imbue(std::locale::classic());
-                    tmp >> ret;
-                    std::errc ec = !tmp ? std::errc::result_out_of_range : std::errc{}; // if fails, assume it must be out of range.
-                    const char* ptr = !tmp ? p : tmp.eof() ? p : buffer + tmp.tellg();
-#endif
-
-                    assert(ec == std::errc{} || ec == std::errc::result_out_of_range);
-                    assert(ptr == p);
-
-                    if (ptr == p)
-                    {
-                        if (ec == std::errc{}) return json(in_place_index::floating, ret); // floating OK
-
-                        if (ec == std::errc::result_out_of_range)
-                        {
-                            if (exp_offset >= 0)
-                            {
-                                // overflow
-                                if (buffer[0] != '-')
-                                    return json(in_place_index::floating, +std::numeric_limits<json::js_floating>::infinity());
-                                else
-                                    return json(in_place_index::floating, -std::numeric_limits<json::js_floating>::infinity());
-                            }
-                            else
-                            {
-                                // underflow
-                                if (buffer[0] != '-')
-                                    return json(in_place_index::floating, static_cast<json::js_floating>(+0.0));
-                                else
-                                    return json(in_place_index::floating, static_cast<json::js_floating>(-0.0));
-                            }
-                        }
-                    }
-                }
-
-                assert(false);
-                throw bad_format("invalid number format: failed to parse");
+                return (void)eat(), *this;
             }
 
-            json read_string()
+            auto operator ++(int)
             {
-                // check quote character
-                assert(*input_ == '"');
-                int_type quote = *input_++; // '"'
-
-                json result(in_place_index::string);
-                json::js_string& ret = *result->as_string();
-
-                while (true)
+                struct iter
                 {
-                    if (input_.eat('\\')) // escape sequence
-                    {
-                        if (*input_ == 'n') ret += '\n';
-                        else if (*input_ == 't') ret += '\t';
-                        else if (*input_ == 'b') ret += '\b';
-                        else if (*input_ == 'f') ret += '\f';
-                        else if (*input_ == 'r') ret += '\r';
-                        else if (*input_ == '\\') ret += '\\';
-                        else if (*input_ == '/') ret += '/';
-                        else if (*input_ == '\"') ret += '\"';
-                        else if (*input_ == '\'') ret += '\'';
-                        else if (*input_ == 'u')
-                        {
-                            auto hex = [&](int_type chr)
-                            {
-                                if (chr >= '0' && chr <= '9') { return chr - '0'; }
-                                if (chr >= 'A' && chr <= 'F') { return chr - 'A' + 10; }
-                                if (chr >= 'a' && chr <= 'f') { return chr - 'a' + 10; }
-                                throw bad_format("invalid string format: expected hexadecimal digit for \\u????", chr);
-                            };
-
-                            int code = 0;
-                            code = code << 4 | hex(*++input_);
-                            code = code << 4 | hex(*++input_);
-                            code = code << 4 | hex(*++input_);
-                            code = code << 4 | hex(*++input_);
-
-                            if (code < 0x80) // 7 bit
-                            {
-                                ret += static_cast<char>((code >> 0 & 0x7F) | 0x00);
-                            }
-                            else if (code < 0x0800) // 11 bit
-                            {
-                                ret += static_cast<char>((code >> 6 & 0x1f) | 0xC0);
-                                ret += static_cast<char>((code >> 0 & 0x3f) | 0x80);
-                            }
-                            else if ((code & 0xF800) == 0xD800) // surrogate pair
-                            {
-                                // assume next surrogate is following.
-                                if (*++input_ != '\\') throw bad_format("invalid string format: expected surrogate pair", *input_);
-                                if (*++input_ != 'u') throw bad_format("invalid string format: expected surrogate pair", *input_);
-
-                                int code2 = 0;
-                                code2 = code2 << 4 | hex(*++input_);
-                                code2 = code2 << 4 | hex(*++input_);
-                                code2 = code2 << 4 | hex(*++input_);
-                                code2 = code2 << 4 | hex(*++input_);
-
-                                if ((code & 0xFC00) == 0xDC00 && (code2 & 0xFC00) == 0xD800)
-                                    std::swap(code, code2);
-
-                                if ((code & 0xFC00) == 0xD800 && (code2 & 0xFC00) == 0xDC00)
-                                    code = ((code & 0x3FF) << 10 | (code2 & 0x3FF)) + 0x10000; // 21 bit
-                                else
-                                    throw bad_format("invalid string format: invalid surrogate pair sequence");
-
-                                ret += static_cast<char>((code >> 18 & 0x07) | 0xF0);
-                                ret += static_cast<char>((code >> 12 & 0x3f) | 0x80);
-                                ret += static_cast<char>((code >> 6 & 0x3f) | 0x80);
-                                ret += static_cast<char>((code >> 0 & 0x3f) | 0x80);
-                            }
-                            else // 16 bit
-                            {
-                                ret += static_cast<char>((code >> 12 & 0x0f) | 0xE0);
-                                ret += static_cast<char>((code >> 6 & 0x3f) | 0x80);
-                                ret += static_cast<char>((code >> 0 & 0x3f) | 0x80);
-                            }
-                        }
-                        else
-                        {
-                            throw bad_format("invalid string format: invalid escape sequence");
-                        }
-                    }
-                    else if (input_.eat(quote)) break; // end of string.
-                    else if (*input_ == EOF) throw bad_format("invalid string format: unexpected eof");
-                    else if (*input_ < 0x20 || *input_ == 0x7F) throw bad_format("invalid string format: control character is not allowed", *input_);
-                    else if (*input_ == '/' && !has_option(option::allow_unescaped_forward_slash)) throw bad_format("invalid string format: unescaped '/' is not allowed");
-                    else ret += static_cast<char_type>(*input_); // OK. normal character.
-                    ++input_;
-                }
-
-                return result;
-            }
-
-            json read_array()
-            {
-                if (!input_.eat('[')) throw bad_format("logic error");
-
-                json result(in_place_index::array);
-                json::js_array& ret = *result->as_array();
-
-                eat_whitespaces();
-
-                if (input_.eat(']')) return result; // empty array
-
-                while (true)
-                {
-                    // read value
-                    ret.push_back(read_element());
-
-                    eat_whitespaces();
-
-                    if (input_.eat(','))
-                    {
-                        eat_whitespaces();
-                        if (has_option(option::allow_trailing_comma) && input_.eat(']')) break;
-                        else if (*input_ == ']') throw bad_format("invalid array format: expected an element (trailing comma not allowed)", *input_);
-                    }
-                    else if (input_.eat(']')) break;
-                    else throw bad_format("invalid array format: ',' or ']' expected", *input_);
-                }
-
-                return result;
-            }
-
-            json read_object()
-            {
-                if (!input_.eat('{')) throw bad_format("logic error");
-
-                json result(in_place_index::object);
-                json::js_object& ret = *result->as_object();
-
-                eat_whitespaces();
-
-                if (input_.eat('}')) return result; // empty object_t
-
-                while (true)
-                {
-                    // read key
-                    json key = [&]
-                    {
-                        if (*input_ == '"') return read_string();
-                        else if (has_option(option::allow_unquoted_object_key))
-                        {
-                            json k(in_place_index::string);
-                            json::js_string& t = *k->as_string();
-                            while (*input_ != EOF && *input_ > ' ' && *input_ != ':')
-                                t += static_cast<char_type>(*input_++);
-                            return k;
-                        }
-                        else throw bad_format("invalid object format: expected object key", *input_);
-                    }();
-
-                    eat_whitespaces();
-
-                    if (!input_.eat(':'))
-                        throw bad_format("invalid object format: expected a ':'", *input_);
-
-                    eat_whitespaces();
-
-                    // read value
-                    ret.insert_or_assign(std::move(*key->as_string()), read_element());
-
-                    eat_whitespaces();
-
-                    // read ',' or '}'
-                    if (input_.eat(','))
-                    {
-                        eat_whitespaces();
-                        if (has_option(option::allow_trailing_comma) && input_.eat('}')) break;
-                        else if (*input_ == '}') throw bad_format("invalid object format: expected an element (trailing comma not allowed)", *input_);
-                    }
-                    else if (input_.eat('}')) break;
-                    else throw bad_format("invalid object format: expected ',' or '}'", *input_);
-                }
-
-                return result;
-            }
-
-            void eat_utf8bom()
-            {
-                if (has_option(option::allow_utf8_bom) && input_.eat(0xEF)) // as beginning of UTF-8 BOM.
-                {
-                    if (!input_.eat(0xBB)) throw bad_format("invalid json format: UTF-8 BOM sequence expected... 0xBB", *input_);
-                    if (!input_.eat(0xBF)) throw bad_format("invalid json format: UTF-8 BOM sequence expected... 0xBF", *input_);
-                }
-                else if (input_.eat(0xEF)) // beginning of UTF-8 BOM?
-                {
-                    throw bad_format("invalid json format: expected an element. (UTF-8 BOM not allowed)", *input_);
-                }
-            }
-
-            void eat_whitespaces()
-            {
-                constexpr auto is_space = [](int_type i)-> bool
-                {
-                    return i == ' ' || i == '\t' || i == '\r' || i == '\n';
+                    int_type value;
+                    int_type operator *() const { return value; }
                 };
 
-                while (true)
-                {
-                    while (is_space(*input_)) ++input_;
-
-                    if (has_option(option::allow_comment) && input_.eat('/'))
-                    {
-                        if (input_.eat('*')) // start of block comment
-                        {
-                            while (*input_ != EOF)
-                            {
-                                if (*input_++ == '*' && input_.eat('/'))
-                                    break;
-                            }
-                        }
-                        else if (input_.eat('/')) // start of line comment
-                        {
-                            while (*input_ != EOF)
-                            {
-                                if (*input_++ == '\n')
-                                    break;
-                            }
-                        }
-
-                        continue;
-                    }
-
-                    break;
-                }
+                return iter{eat()};
             }
+        } input_;
 
-            [[nodiscard]] exceptions::bad_format bad_format(std::string_view reason, std::optional<int_type> but_encountered = std::nullopt) const
-            {
-                std::stringstream message;
-                message << "bad_format: ";
-                message << reason;
-                if (but_encountered)
-                {
-                    message << " but encountered ";
-                    if (*but_encountered == EOF)
-                    {
-                        message << "EOF";
-                    }
-                    else if (*but_encountered >= 0x20 && but_encountered < 0x7F)
-                    {
-                        message << "'";
-                        message << static_cast<char_type>(*but_encountered);
-                        message << "'";
-                    }
-                    else
-                    {
-                        message << "(char)";
-                        message << std::hex << std::setfill('0') << std::setw(2) << *but_encountered;
-                    }
-                }
-                message << " at line ";
-                message << (input_.current_position_line_ + 1);
-                message << " column ";
-                message << (input_.current_position_column_ + 1);
-                message << ".";
+        json_parse_option option_bits_{};
 
-                return exceptions::bad_format{message.str()};
-            }
-        };
+        // ctor
+        json_reader(CharInputIterator begin, CharInputIterator end, json_parse_option option) : input_{begin, end}, option_bits_(option) { }
 
-        template <class character_input_iterator>
-        static json parse_json(
-            character_input_iterator begin,
-            character_input_iterator end,
-            option loose = option::default_option)
+        // executes parsing
+        [[nodiscard]] json execute()
         {
-            return reader<character_input_iterator>::read_json(
-                std::move(begin), std::move(end),
-                loose);
+            eat_utf8bom();
+            eat_whitespaces();
+            return read_element();
         }
 
-        template <
-            class istream,
-            std::enable_if_t<std::is_constructible_v<std::istreambuf_iterator<json::char_type>, istream&>>* = nullptr>
-        static json read_json(
-            istream& source,
-            option loose = option::default_option)
+        // gets the option bit enabled.
+        [[nodiscard]] bool has_option(json_parse_option bit) const noexcept
         {
-            return parse_json(
-                std::istreambuf_iterator<json::char_type>(source),
-                std::istreambuf_iterator<json::char_type>(),
-                loose);
+            return (option_bits_ & bit) != json_parse_option::none;
         }
-    }
 
-    namespace json_stringifier
-    {
-        struct format_options
+        // reads single node from the stream.
+        json read_element()
         {
-            std::chars_format floating_format = std::chars_format::general;
-            int floating_precision = 7;
-
-            [[nodiscard]] static format_options from_stream(std::ios_base& stream)
+            switch (*input_)
             {
-                format_options r{};
-                const auto mode = stream.flags() & std::ios_base::floatfield;
-                if (mode == std::ios_base::fixed) r.floating_format = std::chars_format::fixed;
-                if (mode == std::ios_base::scientific) r.floating_format = std::chars_format::scientific;
-                r.floating_precision = std::clamp(static_cast<int>(stream.precision()), 0, 64);
-                return r;
-            }
-        };
+            case 'n': // `null`
+                if (!input_.eat('n')) throw bad_format("invalid 'null' literal: expected 'n'", *input_);
+                if (!input_.eat('u')) throw bad_format("invalid 'null' literal: expected 'u'", *input_);
+                if (!input_.eat('l')) throw bad_format("invalid 'null' literal: expected 'l'", *input_);
+                if (!input_.eat('l')) throw bad_format("invalid 'null' literal: expected 'l'", *input_);
+                return json{in_place_index::null};
 
-        template <class character_output_iterator>
-        class stringifier
+            case 't': // `true`
+                if (!input_.eat('t')) throw bad_format("invalid 'true' literal: expected 't'", *input_);
+                if (!input_.eat('r')) throw bad_format("invalid 'true' literal: expected 'r'", *input_);
+                if (!input_.eat('u')) throw bad_format("invalid 'true' literal: expected 'u'", *input_);
+                if (!input_.eat('e')) throw bad_format("invalid 'true' literal: expected 'e'", *input_);
+                return json{in_place_index::boolean, true};
+
+            case 'f': // `false`
+                if (!input_.eat('f')) throw bad_format("invalid 'false' literal: expected 'f'", *input_);
+                if (!input_.eat('a')) throw bad_format("invalid 'false' literal: expected 'a'", *input_);
+                if (!input_.eat('l')) throw bad_format("invalid 'false' literal: expected 'l'", *input_);
+                if (!input_.eat('s')) throw bad_format("invalid 'false' literal: expected 's'", *input_);
+                if (!input_.eat('e')) throw bad_format("invalid 'false' literal: expected 'e'", *input_);
+                return json{in_place_index::boolean, false};
+
+            case '+':
+            case '-':
+            case '0':
+            case '1':
+            case '2':
+            case '3':
+            case '4':
+            case '5':
+            case '6':
+            case '7':
+            case '8':
+            case '9':
+                return read_number();
+
+            case '"':
+                return read_string();
+
+            case '[':
+                return read_array();
+
+            case '{':
+                return read_object();
+
+            default:
+                break;
+            }
+
+            throw bad_format("invalid json format: expected an element", *input_);
+        }
+
+        // reads integer or floating
+        json read_number()
         {
-        public:
-            static void write_json(
-                character_output_iterator destination,
-                const json& source,
-                format_options options,
-                bool pretty,
-                bool dump_type_as_comment = false)
+            constexpr auto is_digit = [](int_type i)-> bool { return i >= '0' && i <= '9'; }; // locale-independent is_digit
+
+            char buffer[128]{};
+            char* p = buffer;
+            char* const integer_limit = buffer + 60;
+            char* const fraction_limit = buffer + 64;
+            char* const decimal_limit = buffer + 128;
+
+            int exp_offset = 0;
+            constexpr auto maximum_exp_offset = (std::numeric_limits<decltype(exp_offset)>::max)();
+            constexpr auto minimum_exp_offset = (std::numeric_limits<decltype(exp_offset)>::lowest)();
+
+            bool integer_type = true;
+
+            // parse integer part
             {
-                stringifier(destination, options, pretty, dump_type_as_comment).write_json(source);
-            }
+                if (input_.eat('-')) { *p++ = '-'; }                                                  // minus sign
+                if (has_option(json_parse_option::allow_number_with_plus_sign) && input_.eat('+')) {} // ignore plus sign
 
-        private:
-            struct output_stream
-            {
-                character_output_iterator it_;
-                explicit output_stream(character_output_iterator it) : it_(std::move(it)) {}
-                output_stream& operator <<(char c) { return *it_++ = c, *this; }
-                output_stream& operator <<(std::string_view view) { return std::copy(view.begin(), view.end(), it_), *this; }
-            } output_;
-
-            const format_options options_;
-            const bool pretty_;
-            const bool dump_type_;
-            std::basic_string<json::char_type> indent_stack_;
-
-        public:
-            stringifier(character_output_iterator& out, format_options options, bool pretty, bool dump_type)
-                : output_(out)
-                , options_(options)
-                , pretty_(pretty)
-                , dump_type_(dump_type) {}
-
-        private:
-            void write_string(const json::js_string_view val)
-            {
-                using namespace std::string_view_literals;
-
-                output_ << '"';
-                for (auto c : val)
+                if (input_.eat('0')) { *p++ = '0'; } // put '0', leading zeros are not allowed in JSON.
+                else if (is_digit(*input_))          // not zero
                 {
-                    static constexpr std::array<json::js_string_view, 256> char_table_
+                    while (is_digit(*input_))
+                        if (p < integer_limit) *p++ = static_cast<char_type>(*input_++);  // put digit
+                        else if (exp_offset < maximum_exp_offset) ++exp_offset, ++input_; // drop digit
+                        else throw bad_format("invalid number format: too long integer sequence");
+                }
+                else throw bad_format("invalid number format: expected a digit", *input_);
+            }
+
+            if (input_.eat('.')) // accept fraction point part
+            {
+                assert(p < fraction_limit);
+                *p++ = '.'; // put decimal point
+                integer_type = false;
+
+                if (is_digit(*input_))
+                {
+                    // if integer part is zero (parse '-0.0000...ddd')
+                    if ((buffer[0] == '0') || (buffer[0] == '-' && buffer[1] == '0'))
                     {
-                        /* 00 */"\\u0000", "\\u0001", "\\u0002", "\\u0003", "\\u0004", "\\u0005", "\\u0006", "\\u0007", "\\b", "\\t", "\\n", "\\u000B", "\\u000C", "\\r", "\\u000E", "\\u000F",
-                        /* 10 */"\\u0010", "\\u0011", "\\f", "\\u0013", "\\u0014", "\\u0015", "\\u0016", "\\u0017", "\\u0018", "\\u0019", "\\u001A", "\\u001B", "\\u001C", "\\u001D", "\\u001E", "\\u001F",
-                        /* 20 */ {}, {}, "\\\"", {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, "\\/",
-                        /* 30 */ {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
-                        /* 40 */ {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
-                        /* 50 */ {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, "\\\\", {}, {}, {},
-                        /* 60 */ {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
-                        /* 70 */ {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, "\\u007F",
-                        /* 80 */ {}, // ... continue to 0xFF
-                    };
+                        while (*input_ == '0')
+                            if (exp_offset > minimum_exp_offset) --exp_offset, ++input_; // drop '0'
+                            else throw bad_format("invalid number format: too long integer sequence");
+                    }
 
-                    if (auto p = char_table_[static_cast<uint8_t>(c)]; !p.empty())
-                        output_ << p;
-                    else
-                        output_ << c;
+                    while (is_digit(*input_))
+                    {
+                        if (p < fraction_limit) *p++ = static_cast<char_type>(*input_++); // put digit
+                        else ++input_;                                                    // drop digit
+                    }
                 }
-                output_ << '"';
+                else throw bad_format("invalid number format: expected a digit", *input_);
             }
 
-            template <size_t N, class integer, std::enable_if_t<std::is_integral_v<integer>>* = nullptr>
-            static std::string_view integer_to_chars(char (&buf)[N], integer i)
+            if (*input_ == 'e' || *input_ == 'E') // accept exponent part
             {
-                auto [ptr, ec] = std::to_chars(std::begin(buf), std::end(buf), i, 10);
-                if (ec != std::errc{}) throw bad_value("failed to to_chars(integer)");
-                return std::string_view(buf, ptr - buf);
-            }
+                ++input_; // 'e'
+                integer_type = false;
 
-            void write_json(const json& value)
-            {
-                switch (value.value().get_type())
+                char exp_part[32]{};
+                char* exp = exp_part;
+                char* const exp_limit = exp_part + std::size(exp_part);
+
+                // read
+
+                if (input_.eat('-')) { *exp++ = '-'; }
+                else if (input_.eat('+')) {} // drop '+'
+
+                if (is_digit(*input_))
                 {
-                case json_type_index::undefined: return write_element(json::js_undefined{});
-                case json_type_index::null: return write_element(*value.value().as_null());
-                case json_type_index::boolean: return write_element(*value.value().as_bool());
-                case json_type_index::integer: return write_element(*value.value().as_integer());
-                case json_type_index::floating: return write_element(*value.value().as_floating());
-                case json_type_index::string: return write_element(*value.value().as_string());
-                case json_type_index::array: return write_element(*value.value().as_array());
-                case json_type_index::object: return write_element(*value.value().as_object());
+                    while (is_digit(*input_))
+                    {
+                        if (exp < exp_limit) *exp++ = static_cast<char_type>(*input_++); // put digit
+                        else ++input_;                                                   // drop digit (it must be overflow, handle later)
+                    }
+                }
+                else throw bad_format("invalid number format: expected a digit", *input_);
+
+                // parse exponent
+                int exp_value{};
+                auto [ptr, ec] = std::from_chars(exp_part, exp, exp_value, 10);
+
+                if (ec == std::errc{} && ptr == exp)
+                {
+                    exp_offset = exp_offset > 0 && exp_value > maximum_exp_offset - exp_offset ? maximum_exp_offset : exp_offset < 0 && exp_value < minimum_exp_offset - exp_offset ? minimum_exp_offset : exp_offset + exp_value;
+                }
+                else if (ec == std::errc::result_out_of_range && ptr == exp)
+                {
+                    exp_offset = exp_part[0] == '-' ? maximum_exp_offset : minimum_exp_offset;
+                }
+                else // other error (bug)
+                {
+                    assert(false);
+                    throw bad_format("invalid number format: unexpected parse error "); // unexpected
                 }
             }
 
-            void write_element(const json::js_undefined)
+            if (exp_offset != 0) // append parsed exponent part to buffer
             {
-                using namespace std::string_view_literals;
-                if (dump_type_) output_ << "/***  UNDEFINED  ***/ undefined /* not allowed */"sv;
-                else throw bad_value("undefined is not allowed");
+                integer_type = false;
+                assert(p < decimal_limit);
+                if (p < decimal_limit) *p++ = 'e';
+                auto [ptr, ec] = std::to_chars(p, decimal_limit, exp_offset, 10);
+                if (ec != std::errc{}) throw bad_format("invalid number format: unexpected error.");
+                p = ptr;
             }
 
-            void write_element(const json::js_null)
+            // try to parse as integer type
+            if (integer_type)
             {
-                using namespace std::string_view_literals;
-                if (dump_type_) output_ << "/***  NULL  ***/ ";
-                output_ << "null"sv;
+                json::js_integer ret{};
+                auto [ptr, ec] = std::from_chars(buffer, p, ret, 10);
+                if (ec == std::errc{} && ptr == p) return json{in_place_index::integer, ret}; // integer OK
             }
 
-            void write_element(const json::js_boolean v)
+            // try to parse as floating type (should succeed)
             {
-                using namespace std::string_view_literals;
-                if (dump_type_) output_ << "/***  BOOLEAN  ***/ "sv;
-                output_ << (v ? "true"sv : "false"sv);
-            }
-
-            void write_element(const json::js_integer v)
-            {
-                using namespace std::string_view_literals;
-                if (dump_type_) output_ << "/***  INTEGER  ***/ "sv;
-                char buf[32];
-                output_ << integer_to_chars(buf, v);
-            }
-
-            void write_element(const json::js_floating v)
-            {
-                using namespace std::string_view_literals;
-                if (dump_type_) output_ << "/***  FLOATING  ***/ "sv;
-
-                if (std::isnan(v))
-                {
-                    if (dump_type_) output_ << "NaN /* not allowed */"sv;
-                    else throw bad_value("NaN is not allowed");
-                }
-                else if (std::isinf(v))
-                {
-                    output_ << (v > 0 ? "1.0e999999999"sv : "-1.0e999999999"sv);
-                    return;
-                }
-                else
-                {
-                    std::chars_format format = std::chars_format::general;
-                    const auto precision = std::clamp(options_.floating_precision, 0, 64);
-                    const auto overflow_limit = std::pow(static_cast<json::js_floating>(10), precision);
-                    const auto underflow_limit = std::pow(static_cast<json::js_floating>(10), precision);
-
-                    if (const auto abs = std::abs(v);
-                        abs < overflow_limit && abs > underflow_limit)
-                        format = options_.floating_format;
-
-#if (defined(__cpp_lib_to_chars) && __cpp_lib_to_chars >= 201611L) // compiler has floating-point to_chars
-                    char s[128]{};
-                    auto [ptr, ec] = std::to_chars(std::begin(s), std::end(s), v, format, precision);
-                    if (ec != std::errc{} || *ptr != '\0') throw bad_value("failed to to_chars(floating)");
-                    output_ << json::js_string_view(s, ptr - s);
+                json::js_floating ret{};
+#if (defined(__cpp_lib_to_chars) && __cpp_lib_to_chars >= 201611L) // compiler has floating-point from_chars
+                auto [ptr, ec] = std::from_chars(buffer, p, ret);
 #else // use fallback implementation
-                    std::ostringstream s{};
-                    s.imbue(std::locale::classic());
-                    if (format == std::chars_format::fixed) s << std::fixed;
-                    if (format == std::chars_format::scientific) s << std::scientific;
-                    s << std::setprecision(precision);
-                    s << v;
-                    out_ << s.str();
+                std::istringstream tmp{std::string(buffer, p)};
+                tmp.imbue(std::locale::classic());
+                tmp >> ret;
+                std::errc ec = !tmp ? std::errc::result_out_of_range : std::errc{}; // if fails, assume it must be out of range.
+                const char* ptr = !tmp ? p : tmp.eof() ? p : buffer + tmp.tellg();
 #endif
+
+                assert(ec == std::errc{} || ec == std::errc::result_out_of_range);
+                assert(ptr == p);
+
+                if (ptr == p && ec == std::errc{}) return json{in_place_index::floating, ret}; // floating OK
+
+                if (ec == std::errc::result_out_of_range) // overflow or underflow
+                {
+                    if (exp_offset >= 0) // overflow
+                        return json{in_place_index::floating, buffer[0] != '-' ? +std::numeric_limits<json::js_floating>::infinity() : -std::numeric_limits<json::js_floating>::infinity()};
+                    else // underflow
+                        return json{in_place_index::floating, buffer[0] != '-' ? +static_cast<json::js_floating>(+0.0) : -static_cast<json::js_floating>(-0.0)};
                 }
             }
 
-            void write_element(const json::js_string& val)
+            assert(false);
+            throw bad_format("invalid number format: failed to parse");
+        }
+
+        // reads quoated string
+        json read_string()
+        {
+            // check quote character
+            assert(*input_ == '"');
+            int_type quote = *input_++; // '"'
+
+            json result(in_place_index::string);         // make empty string
+            json::js_string& ret = *result->as_string(); // and get reference to it.
+
+            while (true)
             {
-                using namespace std::string_view_literals;
-                if (dump_type_)
+                if (input_.eat('\\')) // escape sequence found?
                 {
-                    char buf[32];
-                    output_ << "/***  STRING["sv << integer_to_chars(buf, val.size()) << "]  ***/ "sv;
-                }
-
-                write_string(val);
-            }
-
-            void write_element(const json::js_array& val)
-            {
-                using namespace std::string_view_literals;
-                if (dump_type_)
-                {
-                    char buf[32];
-                    output_ << "/***  ARRAY["sv << integer_to_chars(buf, val.size()) << "]  ***/ "sv;
-                }
-
-                if (!val.empty())
-                {
-                    output_ << '[';
-                    if (pretty_) output_ << "\n"sv;
-                    indent_stack_.push_back(' ');
-                    indent_stack_.push_back(' ');
-                    for (auto it = val.begin(); it != val.end(); ++it)
+                    if (*input_ == 'n') ret += '\n';
+                    else if (*input_ == 't') ret += '\t';
+                    else if (*input_ == 'b') ret += '\b';
+                    else if (*input_ == 'f') ret += '\f';
+                    else if (*input_ == 'r') ret += '\r';
+                    else if (*input_ == '\\') ret += '\\';
+                    else if (*input_ == '/') ret += '/';
+                    else if (*input_ == '\"') ret += '\"';
+                    else if (*input_ == '\'') ret += '\'';
+                    else if (*input_ == 'u') // \uXXXX is converted to UTF-8 sequence
                     {
-                        if (it != val.begin())
+                        auto hex = [&](int_type chr)
                         {
-                            output_ << ',';
-                            if (pretty_) output_ << '\n';
+                            if (chr >= '0' && chr <= '9') { return chr - '0'; }
+                            if (chr >= 'A' && chr <= 'F') { return chr - 'A' + 10; }
+                            if (chr >= 'a' && chr <= 'f') { return chr - 'a' + 10; }
+                            throw bad_format("invalid string format: expected hexadecimal digit for \\u????", chr);
+                        };
+
+                        int code = 0;
+                        code = code << 4 | hex(*++input_);
+                        code = code << 4 | hex(*++input_);
+                        code = code << 4 | hex(*++input_);
+                        code = code << 4 | hex(*++input_);
+
+                        if (code < 0x80) // 7 bit
+                        {
+                            ret += static_cast<char>((code >> 0 & 0x7F) | 0x00);
                         }
-                        if (pretty_) output_ << indent_stack_;
-                        write_json(*it);
+                        else if (code < 0x0800) // 11 bit
+                        {
+                            ret += static_cast<char>((code >> 6 & 0x1f) | 0xC0);
+                            ret += static_cast<char>((code >> 0 & 0x3f) | 0x80);
+                        }
+                        else if ((code & 0xF800) == 0xD800) // surrogate pair
+                        {
+                            // assume next surrogate is following.
+                            if (*++input_ != '\\') throw bad_format("invalid string format: expected surrogate pair", *input_);
+                            if (*++input_ != 'u') throw bad_format("invalid string format: expected surrogate pair", *input_);
+
+                            int code2 = 0;
+                            code2 = code2 << 4 | hex(*++input_);
+                            code2 = code2 << 4 | hex(*++input_);
+                            code2 = code2 << 4 | hex(*++input_);
+                            code2 = code2 << 4 | hex(*++input_);
+
+                            if ((code & 0xFC00) == 0xDC00 && (code2 & 0xFC00) == 0xD800)
+                                std::swap(code, code2);
+
+                            if ((code & 0xFC00) == 0xD800 && (code2 & 0xFC00) == 0xDC00)
+                                code = ((code & 0x3FF) << 10 | (code2 & 0x3FF)) + 0x10000; // 21 bit
+                            else
+                                throw bad_format("invalid string format: invalid surrogate pair sequence");
+
+                            ret += static_cast<char>((code >> 18 & 0x07) | 0xF0);
+                            ret += static_cast<char>((code >> 12 & 0x3f) | 0x80);
+                            ret += static_cast<char>((code >> 6 & 0x3f) | 0x80);
+                            ret += static_cast<char>((code >> 0 & 0x3f) | 0x80);
+                        }
+                        else // 16 bit
+                        {
+                            ret += static_cast<char>((code >> 12 & 0x0f) | 0xE0);
+                            ret += static_cast<char>((code >> 6 & 0x3f) | 0x80);
+                            ret += static_cast<char>((code >> 0 & 0x3f) | 0x80);
+                        }
                     }
-                    indent_stack_.pop_back();
-                    indent_stack_.pop_back();
-                    if (pretty_) output_ << '\n' << indent_stack_;
-                    output_ << ']';
-                }
-                else
-                {
-                    output_ << "[]"sv;
-                }
-            }
-
-            void write_element(const json::js_object& val)
-            {
-                using namespace std::string_view_literals;
-                if (dump_type_)
-                {
-                    char buf[32];
-                    output_ << "/***  OBJECT["sv << integer_to_chars(buf, val.size()) << "]  ***/ "sv;
-                }
-
-                if (!val.empty())
-                {
-                    output_ << '{';
-                    if (pretty_) output_ << '\n';
-
-                    indent_stack_.push_back(' ');
-                    indent_stack_.push_back(' ');
-                    for (auto it = val.begin(); it != val.end(); ++it)
+                    else
                     {
-                        if (it != val.begin())
-                        {
-                            output_ << ',';
-                            if (pretty_) output_ << '\n';
-                        }
-                        if (pretty_) output_ << indent_stack_;
-                        write_string(it->first);
-                        output_ << ':';
-                        if (pretty_) output_ << ' ';
-                        write_json(it->second);
+                        throw bad_format("invalid string format: invalid escape sequence");
                     }
-                    indent_stack_.pop_back();
-                    indent_stack_.pop_back();
-                    if (pretty_) output_ << '\n' << indent_stack_;
-                    output_ << '}';
                 }
-                else
-                {
-                    output_ << "{}"sv;
-                }
+                else if (input_.eat(quote)) break; // end of string.
+                else if (*input_ == EOF) throw bad_format("invalid string format: unexpected eof");
+                else if (*input_ < 0x20 || *input_ == 0x7F) throw bad_format("invalid string format: control character is not allowed", *input_);
+                else if (*input_ == '/' && !has_option(json_parse_option::allow_unescaped_forward_slash)) throw bad_format("invalid string format: unescaped '/' is not allowed");
+                else ret += static_cast<char_type>(*input_); // OK. normal character.
+                ++input_;
             }
-        };
 
-        /// to output iterator
-        template <
-            class character_output_iterator,
-            std::void_t<decltype(*std::declval<character_output_iterator>() = json::char_type{})>* = nullptr>
-        void write_json(
-            character_output_iterator destination,
-            const json& json,
-            format_options options,
-            bool pretty = false,
-            bool dump_type_as_comment = false)
-        {
-            stringifier<character_output_iterator>::write_json(destination, json, options, pretty, dump_type_as_comment);
-        }
-
-        /// to ostream with format_options by current stream flags
-        template <
-            class ostream,
-            std::enable_if_t<std::is_constructible_v<std::ostreambuf_iterator<char>, ostream&>>* = nullptr>
-        void write_json(
-            ostream& destination,
-            const json& json,
-            format_options options,
-            bool pretty = false,
-            bool dump_type_as_comment = false)
-        {
-            write_json(std::ostreambuf_iterator{destination}, json, options, pretty, dump_type_as_comment);
-        }
-
-        /// to ostream with format_options by current stream flags
-        template <
-            class ostream,
-            std::enable_if_t<std::is_constructible_v<std::ostreambuf_iterator<char>, ostream&>>* = nullptr>
-        void write_json(
-            ostream& destination,
-            const json& json,
-            bool pretty = false,
-            bool dump_type_as_comment = false)
-        {
-            format_options options{};
-            if constexpr (std::is_convertible_v<ostream&, std::ios_base&>)
-                options = format_options::from_stream(destination);
-
-            write_json(std::ostreambuf_iterator{destination}, json, options, pretty, dump_type_as_comment);
-        }
-    }
-
-    /// json_reader
-    class json::json_reader
-    {
-    public:
-        using option = json_parser::option;
-
-        // From stream
-        static json read_json(json_istream& source, option opt = option::default_option)
-        {
-            return json_parser::read_json(source, opt);
-        }
-
-        // From string
-        static json parse_json(json_string_view source, option opt = option::default_option)
-        {
-            return json_parser::parse_json(source.begin(), source.end(), opt);
-        }
-    };
-
-    /// json_writer
-    class json::json_writer
-    {
-    public:
-        // To stream
-        static void write_json(json_ostream& destination, const json& val, bool pretty = false, bool debug_dump = false)
-        {
-            json_stringifier::write_json(destination, val, pretty, debug_dump);
-        }
-
-        // To string
-        static json_string to_json_string(const json& json, bool pretty = false, bool debug_dump = false)
-        {
-            json_string result;
-            json_stringifier::write_json(std::back_inserter(result), json, {}, pretty, debug_dump);
             return result;
         }
+
+        // reads array `[...]`
+        json read_array()
+        {
+            if (!input_.eat('[')) throw bad_format("logic error (bug)");
+
+            json result(in_place_index::array);        // make empty array
+            json::js_array& ret = *result->as_array(); // and get reference to it.
+
+            eat_whitespaces();
+
+            if (input_.eat(']')) return result; // empty array
+
+            while (true)
+            {
+                // read value
+                ret.push_back(read_element());
+
+                eat_whitespaces();
+
+                if (input_.eat(','))
+                {
+                    eat_whitespaces();
+                    if (has_option(json_parse_option::allow_trailing_comma) && input_.eat(']')) break;
+                    else if (*input_ == ']') throw bad_format("invalid array format: expected an element (trailing comma not allowed)", *input_);
+                }
+                else if (input_.eat(']')) break;
+                else throw bad_format("invalid array format: ',' or ']' expected", *input_);
+            }
+
+            return result;
+        }
+
+        // reads object `{...}`
+        json read_object()
+        {
+            if (!input_.eat('{')) throw bad_format("logic error (bug)");
+
+            json result(in_place_index::object);         // make empty object
+            json::js_object& ret = *result->as_object(); // and get reference to it.
+
+            eat_whitespaces();
+
+            if (input_.eat('}')) return result; // empty object_t
+
+            while (true)
+            {
+                // read key
+                json key = [&]
+                {
+                    if (*input_ == '"') return read_string(); // quoted key (normal)
+                    else if (has_option(json_parse_option::allow_unquoted_object_key))
+                    {
+                        json k(in_place_index::string);                           // make empty string(object key)
+                        json::js_string& t = *k->as_string();                     // and get reference to it.
+                        while (*input_ != EOF && *input_ > ' ' && *input_ != ':') // until delimiter found
+                            t += static_cast<char_type>(*input_++);               // read a character as  object key
+                        return k;
+                    }
+                    else throw bad_format("invalid object format: expected object key", *input_);
+                }();
+
+                eat_whitespaces();
+
+                if (!input_.eat(':'))
+                    throw bad_format("invalid object format: expected a ':'", *input_);
+
+                eat_whitespaces();
+
+                // read value
+                json value = read_element();
+                ret.insert_or_assign(std::move(*key->as_string()), std::move(value));
+
+                eat_whitespaces();
+
+                // read ',' or '}'
+                if (input_.eat(','))
+                {
+                    eat_whitespaces();
+
+                    // check '}'
+                    if (input_.eat('}'))
+                    {
+                        if (has_option(json_parse_option::allow_trailing_comma)) break; // OK
+                        else throw bad_format("invalid object format: expected an element (trailing comma not allowed)", *input_);
+                    }
+
+                    continue; // to next `key: value`
+                }
+                else if (input_.eat('}')) break;
+                else throw bad_format("invalid object format: expected ',' or '}'", *input_);
+            }
+
+            return result;
+        }
+
+        // eats BOM sequence `EFBBBF` if allowed.
+        void eat_utf8bom()
+        {
+            if (input_.eat(0xEF)) // if stream starts with 0xEF, regard it as beginning of UTF-8 BOM.
+            {
+                if (!has_option(json_parse_option::allow_utf8_bom)) throw bad_format("invalid json format: expected an element. (UTF-8 BOM not allowed)", *input_);
+                if (!input_.eat(0xBB)) throw bad_format("invalid json format: UTF-8 BOM sequence expected... 0xBB", *input_);
+                if (!input_.eat(0xBF)) throw bad_format("invalid json format: UTF-8 BOM sequence expected... 0xBF", *input_);
+            }
+        }
+
+        // eats continuous white spaces and comments `/*...*/`, `//...\n`
+        void eat_whitespaces()
+        {
+            // locale-independent is_space
+            constexpr auto is_space = [](int_type i)-> bool { return i == ' ' || i == '\t' || i == '\r' || i == '\n'; };
+
+            while (true)
+            {
+                while (is_space(*input_)) ++input_;
+
+                if (has_option(json_parse_option::allow_comment) && input_.eat('/'))
+                {
+                    if (input_.eat('*')) // start of block comment
+                    {
+                        while (*input_ != EOF)
+                        {
+                            if (*input_++ == '*' && input_.eat('/'))
+                                break;
+                        }
+                    }
+                    else if (input_.eat('/')) // start of line comment
+                    {
+                        while (*input_ != EOF)
+                        {
+                            if (*input_++ == '\n')
+                                break;
+                        }
+                    }
+
+                    continue;
+                }
+
+                break;
+            }
+        }
+
+        // makes a bad_format exception with error message
+        [[nodiscard]] exceptions::bad_format bad_format(std::string_view reason, std::optional<int_type> but_encountered = std::nullopt) const
+        {
+            std::stringstream message;
+            message << "bad_format: ";
+            message << reason;
+            if (but_encountered)
+            {
+                message << " but encountered ";
+                if (*but_encountered == EOF)
+                {
+                    message << "EOF";
+                }
+                else if (*but_encountered >= 0x20 && but_encountered < 0x7F)
+                {
+                    message << "'";
+                    message << static_cast<char>(*but_encountered);
+                    message << "'";
+                }
+                else
+                {
+                    message << "(char)";
+                    message << std::hex << std::setfill('0') << std::setw(2) << *but_encountered;
+                }
+            }
+            message << " at line ";
+            message << (input_.current_position_line_ + 1);
+            message << " column ";
+            message << (input_.current_position_column_ + 1);
+            message << ".";
+
+            return exceptions::bad_format{message.str()};
+        }
     };
 
-    inline json json::read_json_string(json_istream& src)
+
+    template <class CharOutputIterator>
+    struct json::json_writer
     {
-        return json_reader::read_json(src, json_reader::option::default_option);
+    public:
+        static void write_json(CharOutputIterator destination, const json& json, json_serialize_option option, json_floating_format_options format)
+        {
+            json_writer(destination, option, format).execute(json);
+        }
+
+    private:
+        struct output_stream
+        {
+            CharOutputIterator it_;
+            explicit output_stream(CharOutputIterator it) : it_(std::move(it)) {}
+            output_stream& operator <<(char c) { return *it_++ = c, *this; }
+            output_stream& operator <<(std::string_view view) { return std::copy(view.begin(), view.end(), it_), *this; }
+        } output_;
+
+        const json_serialize_option option_bits_{};
+        const json_floating_format_options floating_format_{};
+        std::basic_string<json::char_type> indent_stack_{};
+
+        // ctor
+        json_writer(CharOutputIterator& out, json_serialize_option option, json_floating_format_options format) : output_(out), option_bits_(option), floating_format_(format) {}
+
+        // executes serializing
+        void execute(const json& value)
+        {
+            write_element(value);
+        }
+
+        // gets the option bit enabled.
+        [[nodiscard]] bool has_option(json_serialize_option bit) const noexcept
+        {
+            return (option_bits_ & bit) != json_serialize_option::none;
+        }
+
+        // string
+        void write_string(const js_string_view val)
+        {
+            using namespace std::string_view_literals;
+
+            output_ << '"';
+            for (auto c : val)
+            {
+                static constexpr std::array<std::string_view, 256> char_table_
+                {
+                    /* 00 */"\\u0000", "\\u0001", "\\u0002", "\\u0003", "\\u0004", "\\u0005", "\\u0006", "\\u0007", "\\b", "\\t", "\\n", "\\u000B", "\\u000C", "\\r", "\\u000E", "\\u000F",
+                    /* 10 */"\\u0010", "\\u0011", "\\f", "\\u0013", "\\u0014", "\\u0015", "\\u0016", "\\u0017", "\\u0018", "\\u0019", "\\u001A", "\\u001B", "\\u001C", "\\u001D", "\\u001E", "\\u001F",
+                    /* 20 */{}, {}, "\\\"", {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, "\\/",
+                    /* 30 */{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
+                    /* 40 */{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
+                    /* 50 */{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, "\\\\", {}, {}, {},
+                    /* 60 */{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {},
+                    /* 70 */{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, "\\u007F",
+                    /* 80 */{}, // ... continue to 0xFF
+                };
+
+                if (auto p = char_table_[static_cast<uint8_t>(c)]; !p.empty())
+                    output_ << p;
+                else
+                    output_ << c;
+            }
+            output_ << '"';
+        }
+
+        // formats a integer `i` into `buffer` and returns it as string_view
+        template <size_t N, class Integer, std::enable_if_t<std::is_integral_v<Integer>>* = nullptr>
+        static std::string_view integer_to_chars(char (&buffer)[N], Integer i)
+        {
+            auto [ptr, ec] = std::to_chars(std::begin(buffer), std::end(buffer), i, 10);
+            if (ec != std::errc{}) throw bad_value("failed to to_chars(integer)");
+            return std::string_view(buffer, ptr - buffer);
+        }
+
+        // element
+        void write_element(const json& value)
+        {
+            switch (value.value().get_type())
+            {
+            case json_type_index::undefined: return write_element(json::js_undefined{});
+            case json_type_index::null: return write_element(*value.value().as_null());
+            case json_type_index::boolean: return write_element(*value.value().as_bool());
+            case json_type_index::integer: return write_element(*value.value().as_integer());
+            case json_type_index::floating: return write_element(*value.value().as_floating());
+            case json_type_index::string: return write_element(*value.value().as_string());
+            case json_type_index::array: return write_element(*value.value().as_array());
+            case json_type_index::object: return write_element(*value.value().as_object());
+            }
+        }
+
+        // undefined
+        void write_element(const js_undefined)
+        {
+            using namespace std::string_view_literals;
+            if (has_option(json_serialize_option::debug_dump_type_as_comment)) output_ << "/***  UNDEFINED  ***/ undefined /* not allowed */"sv;
+            else throw bad_value("undefined is not allowed");
+        }
+
+        // null
+        void write_element(const js_null)
+        {
+            using namespace std::string_view_literals;
+            if (has_option(json_serialize_option::debug_dump_type_as_comment)) output_ << "/***  NULL  ***/ ";
+            output_ << "null"sv;
+        }
+
+        // true or false
+        void write_element(const js_boolean v)
+        {
+            using namespace std::string_view_literals;
+            if (has_option(json_serialize_option::debug_dump_type_as_comment)) output_ << "/***  BOOLEAN  ***/ "sv;
+            output_ << (v ? "true"sv : "false"sv);
+        }
+
+        // integer
+        void write_element(const js_integer v)
+        {
+            using namespace std::string_view_literals;
+            if (has_option(json_serialize_option::debug_dump_type_as_comment)) output_ << "/***  INTEGER  ***/ "sv;
+            char buf[64];
+            output_ << integer_to_chars(buf, v);
+        }
+
+        // floating
+        void write_element(const js_floating v)
+        {
+            using namespace std::string_view_literals;
+            if (has_option(json_serialize_option::debug_dump_type_as_comment)) output_ << "/***  FLOATING  ***/ "sv;
+
+            if (std::isnan(v))
+            {
+                if (has_option(json_serialize_option::debug_dump_type_as_comment)) output_ << "NaN /* not allowed */"sv;
+                else throw bad_value("NaN is not allowed");
+            }
+            else if (std::isinf(v))
+            {
+                output_ << (v >= 0 ? "1.0e999999999"sv : "-1.0e999999999"sv);
+            }
+            else // normal
+            {
+                std::chars_format format = std::chars_format::general;
+                const auto precision = std::clamp(floating_format_.floating_precision, 0, 64);
+                const auto overflow_limit = std::pow(static_cast<json::js_floating>(10), precision);
+                const auto underflow_limit = std::pow(static_cast<json::js_floating>(10), -precision);
+
+                if (const auto abs = std::abs(v);
+                    abs < overflow_limit && abs > underflow_limit)
+                    format = floating_format_.floating_format;
+
+#if (defined(__cpp_lib_to_chars) && __cpp_lib_to_chars >= 201611L) // compiler has floating-point to_chars
+                char s[128]{};
+                auto [ptr, ec] = std::to_chars(std::begin(s), std::end(s), v, format, precision);
+                if (ec != std::errc{} || *ptr != '\0') throw bad_value("failed to to_chars(floating)");
+                output_ << s; // json::js_string_view(s, ptr - s);
+#else // use fallback implementation
+                std::ostringstream s{};
+                s.imbue(std::locale::classic());
+                if (format == std::chars_format::fixed) s << std::fixed;
+                if (format == std::chars_format::scientific) s << std::scientific;
+                s << std::setprecision(precision);
+                s << v;
+                output_ << s.str();
+#endif
+            }
+        }
+
+        // string
+        void write_element(const js_string& val)
+        {
+            using namespace std::string_view_literals;
+            if (has_option(json_serialize_option::debug_dump_type_as_comment))
+            {
+                char buf[32];
+                output_ << "/***  STRING["sv << integer_to_chars(buf, val.size()) << "]  ***/ "sv;
+            }
+
+            write_string(val);
+        }
+
+        // array
+        void write_element(const js_array& val)
+        {
+            using namespace std::string_view_literals;
+            if (has_option(json_serialize_option::debug_dump_type_as_comment))
+            {
+                char buf[32];
+                output_ << "/***  ARRAY["sv << integer_to_chars(buf, val.size()) << "]  ***/ "sv;
+            }
+
+            if (!val.empty())
+            {
+                output_ << '[';
+                if (has_option(json_serialize_option::pretty)) output_ << "\n"sv;
+                indent_stack_.push_back(' ');
+                indent_stack_.push_back(' ');
+                for (auto it = val.begin(); it != val.end(); ++it)
+                {
+                    if (it != val.begin())
+                    {
+                        output_ << ',';
+                        if (has_option(json_serialize_option::pretty)) output_ << '\n';
+                    }
+                    if (has_option(json_serialize_option::pretty)) output_ << indent_stack_;
+                    write_element(*it);
+                }
+                indent_stack_.pop_back();
+                indent_stack_.pop_back();
+                if (has_option(json_serialize_option::pretty)) output_ << '\n' << indent_stack_;
+                output_ << ']';
+            }
+            else
+            {
+                output_ << "[]"sv;
+            }
+        }
+
+        // object
+        void write_element(const js_object& val)
+        {
+            using namespace std::string_view_literals;
+            if (has_option(json_serialize_option::debug_dump_type_as_comment))
+            {
+                char buf[32];
+                output_ << "/***  OBJECT["sv << integer_to_chars(buf, val.size()) << "]  ***/ "sv;
+            }
+
+            if (!val.empty())
+            {
+                output_ << '{';
+                if (has_option(json_serialize_option::pretty)) output_ << '\n';
+
+                indent_stack_.push_back(' ');
+                indent_stack_.push_back(' ');
+                for (auto it = val.begin(); it != val.end(); ++it)
+                {
+                    if (it != val.begin())
+                    {
+                        output_ << ',';
+                        if (has_option(json_serialize_option::pretty)) output_ << '\n';
+                    }
+                    if (has_option(json_serialize_option::pretty)) output_ << indent_stack_;
+                    write_string(it->first);
+                    output_ << ':';
+                    if (has_option(json_serialize_option::pretty)) output_ << ' ';
+                    write_element(it->second);
+                }
+                indent_stack_.pop_back();
+                indent_stack_.pop_back();
+                if (has_option(json_serialize_option::pretty)) output_ << '\n' << indent_stack_;
+                output_ << '}';
+            }
+            else
+            {
+                output_ << "{}"sv;
+            }
+        }
+    };
+
+    inline namespace io
+    {
+        template <class CharInputIterator>
+        static json parse_json(CharInputIterator begin, CharInputIterator end, json_parse_option loose = json_parse_option::default_option)
+        {
+            return json::json_reader<CharInputIterator>::read_json(std::move(begin), std::move(end), loose);
+        }
+
+        static json parse_json(json::json_string_view sv, json_parse_option loose = json_parse_option::default_option)
+        {
+            return io::parse_json<json::json_string_view::const_iterator>(sv.begin(), sv.end(), loose);
+        }
+
+        template <class CharOutputIterator>
+        static void serialize_json(CharOutputIterator begin, const json& value, json_serialize_option option = json_serialize_option::none, json_floating_format_options floating_format = {})
+        {
+            return json::json_writer<CharOutputIterator>::write_json(std::move(begin), value, option, floating_format);
+        }
+
+        template <class DestinationContainer = json::json_string>
+        static inline DestinationContainer serialize_json(const json& value, json_serialize_option option = json_serialize_option::none, json_floating_format_options floating_format = {})
+        {
+            DestinationContainer string;
+            io::serialize_json<std::back_insert_iterator<DestinationContainer>>(std::back_insert_iterator(string), value, option, floating_format);
+            return string;
+        }
     }
 
-    inline json json::parse(const json_string_view& source)
-    {
-        return json_reader::parse_json(source, json_reader::option::default_option);
-    }
+    inline json json::parse(const json_string_view& source, json_parse_option opt) { return io::parse_json(source, opt); }
 
-    inline void json::write_json_string(json_ostream& dst, bool pretty) const
-    {
-        json_writer::write_json(dst, *this, pretty);
-    }
-
-    inline json::json_string json::to_json_string(bool pretty) const
-    {
-        return json_writer::to_json_string(*this, pretty);
-    }
+    inline json::json_string json::serialize(json_serialize_option opt, json_floating_format_options format) const { return io::serialize_json(*this, opt, format); }
 
     ////
     //// json_t::json_ext specializations
@@ -1813,60 +1710,93 @@ namespace nanojson3
         }
     };
 
-
-    ////
-    //// iostream manipulators/operators
-    ////
-
-    namespace ios_helper
+    // i/o stream operators
+    namespace ios
     {
-        inline int json_ios_flags_index()
+        template <class F>
+        struct stream_manipulator : F
+        {
+            constexpr stream_manipulator(F&& f) : F(f) {}
+
+            template <class Char, class Traits>
+            inline friend auto operator >>(std::basic_istream<Char, Traits>& istream, const stream_manipulator& manipulator) noexcept(noexcept(manipulator(istream))) -> decltype(istream)
+            {
+                return (void)manipulator(istream), istream;
+            }
+
+            template <class Char, class Traits>
+            inline friend auto operator <<(std::basic_ostream<Char, Traits>& ostream, const stream_manipulator& manipulator) noexcept(noexcept(manipulator(ostream))) -> decltype(ostream)
+            {
+                return (void)manipulator(ostream), ostream;
+            }
+        };
+
+        // allocates json parse option word index
+        [[nodiscard]] inline int json_istream_parse_option_index()
         {
             static int index = std::ios_base::xalloc();
             return index;
         }
 
-        enum flags : long
+        // allocates json serialize option word index
+        [[nodiscard]] inline int json_ostream_serialize_option_index()
         {
-            json_ios_flag_pretty = 1 << 1,
-            json_ios_flag_loose = 1 << 2,
-        };
-
-        inline json::json_istream& json_ios_loose(json::json_istream& is)
-        {
-            is.iword(json_ios_flags_index()) |= (flags::json_ios_flag_loose);
-            return is;
+            static int index = std::ios_base::xalloc();
+            return index;
         }
 
-        inline json::json_ostream& json_ios_pretty(json::json_ostream& os)
+        // makes json input manipulator
+        [[nodiscard]] static inline constexpr auto json_ios_option(json_parse_option opt)
         {
-            os.iword(json_ios_flags_index()) |= (flags::json_ios_flag_pretty);
-            return os;
+            return stream_manipulator([opt](std::istream& os) { os.iword(json_istream_parse_option_index()) = static_cast<long>(opt); });
         }
 
-        inline json::json_istream& operator >>(json::json_istream& is, json& j)
+        // istream& operator >>(istream&, json&)
+        static inline auto operator >>(std::basic_istream<json::char_type>& istream, json& j) -> decltype(istream)
         {
-            const long flags = std::exchange(is.iword(json_ios_flags_index()), 0);
-            j = json::json_reader::read_json(
-                is,
-                flags & flags::json_ios_flag_loose
-                    ? json::json_reader::option::all
-                    : json::json_reader::option::none);
-            return is;
+            const auto opt = static_cast<json_parse_option>(istream.iword(json_istream_parse_option_index()));
+            j = io::parse_json<std::istreambuf_iterator<json::char_type>>(istream, {}, opt);
+            return istream;
         }
 
-        inline json::json_ostream& operator <<(json::json_ostream& os, const json& j)
+        // makes json output manipulator
+        [[nodiscard]] static inline constexpr auto json_ios_option(json_serialize_option opt)
         {
-            const long flags = std::exchange(os.iword(json_ios_flags_index()), 0);
-            json::json_writer::write_json(os, j, flags & flags::json_ios_flag_pretty);
-            return os;
+            return stream_manipulator([opt](std::ostream& os) { os.iword(json_ostream_serialize_option_index()) = static_cast<long>(opt); });
+        }
+
+        // gets json floating format from stream
+        [[nodiscard]] static json_floating_format_options json_floating_format_options_from_stream(const std::ios_base& stream)
+        {
+            json_floating_format_options r{};
+            const auto mode = stream.flags() & std::ios_base::floatfield;
+            if (mode == std::ios_base::fixed) r.floating_format = std::chars_format::fixed;
+            if (mode == std::ios_base::scientific) r.floating_format = std::chars_format::scientific;
+            r.floating_precision = std::clamp(static_cast<int>(stream.precision()), 0, 64);
+            return r;
+        }
+
+        // ostream& operator <<(ostream&, const json&)
+        inline auto operator <<(std::basic_ostream<json::char_type>& ostream, const json& j) -> decltype(ostream)
+        {
+            // opt
+            const auto opt = static_cast<json_serialize_option>(ostream.iword(json_ostream_serialize_option_index()));
+            const auto fmt = json_floating_format_options_from_stream(ostream);
+            io::serialize_json<std::ostreambuf_iterator<json::char_type>>(ostream, j, opt, fmt);
+            return ostream;
         }
     }
 
-    using ios_helper::json_ios_loose;
-    using ios_helper::json_ios_pretty;
-    using ios_helper::operator <<;
-    using ios_helper::operator >>;
+    // json stream operators and manipulators
+    // usage: `std::cin >> json_set_option(json_parse_option::default) << json;`
+    // usage: `std::cout << json_set_option(json_serialize_option::pretty) << json;`
+    using ios::json_ios_option;
+    using ios::operator <<;
+    using ios::operator >>;
+    static constexpr auto json_in_strict = json_ios_option(json_parse_option::none);
+    static constexpr auto json_in_default = json_ios_option(json_parse_option::default_option);
+    static constexpr auto json_in_loose = json_ios_option(json_parse_option::all);
+    static constexpr auto json_out_pretty = json_ios_option(json_serialize_option::pretty);
 
     // type exports
 
@@ -1881,7 +1811,5 @@ namespace nanojson3
     using js_object = json::js_object;
 
     using json_string = json::json_string;
-    using json_reader = json::json_reader;
-    using json_writer = json::json_writer;
 }
 #endif

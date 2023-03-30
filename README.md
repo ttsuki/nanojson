@@ -60,7 +60,7 @@ class json
 
 ```cpp
 using namespace nanojson3;
-std::cout << json_ios_pretty << json::parse(R"([123, 456, "abc"])") << "\n";
+std::cout << json_out_pretty << json::parse(R"([123, 456, "abc"])") << "\n";
 ```
 
 ```json
@@ -74,7 +74,7 @@ std::cout << json_ios_pretty << json::parse(R"([123, 456, "abc"])") << "\n";
 ```cpp
 json json;
 std::cin >> json;                     // parse input
-std::cout << json_ios_pretty << json; // output pretty
+std::cout << json_out_pretty << json; // output pretty
 ```
 
 ### 🌟 Some loose parse option by flags.
@@ -108,12 +108,12 @@ auto src = R""(
 )"";
 ```
 ```cpp
-std::cout << json_ios_pretty << json_reader::parse_json(
+std::cout << json_out_pretty << json_reader::parse_json(
     src
-    , json_reader::option::default_option            // default allows utf-8 bom, unescaped forward slash '/'
-    | json_reader::option::allow_comment             // allows block/line comments
-    | json_reader::option::allow_trailing_comma      // allows comma following last element
-    | json_reader::option::allow_unquoted_object_key // allows naked object key
+    , json_parse_option::default_option            // default allows utf-8 bom, unescaped forward slash '/'
+    | json_parse_option::allow_comment             // allows block/line comments
+    | json_parse_option::allow_trailing_comma      // allows comma following last element
+    | json_parse_option::allow_unquoted_object_key // allows naked object key
     // or simply `json_reader::loose_option::all` enables all loose option flags.
 );
 ```
@@ -162,7 +162,7 @@ json json = json_reader::parse_json(R""(
 ```
 ````cpp
 )"", json_reader::loose_option::allow_comment);
-std::cout << json_ios_pretty << json;
+std::cout << json_out_pretty << json;
 ````
 
 👇 The Output `.json` is
@@ -278,7 +278,7 @@ if (auto a = json->as_array()) // gets js_array interface (is simply std::vector
     a->push_back(123);
     a->push_back("abc");
 }
-std::cout << json_ios_pretty << json << std::endl;
+std::cout << json_out_pretty << json << std::endl;
 ```
 
 ```cpp
@@ -294,7 +294,7 @@ if (auto a = json->as_object()) // gets js_object interface (is simply std::map<
     a->insert_or_assign("e", "abc");
     a->insert_or_assign("f", js_object{{"f1", 123}, {"f2", 456}, {"f3", 789},});
 }
-std::cout << json_ios_pretty << json << std::endl;
+std::cout << json_out_pretty << json << std::endl;
 ```
 
 ### 🌟 Making JSON Values From STL Containers
@@ -311,7 +311,7 @@ std::cout << json_ios_pretty << json << std::endl;
         {4, 5, 6},
         {7, 8, 9}
     };
-    std::cout << json_ios_pretty << json << std::endl;
+    std::cout << json_out_pretty << json << std::endl;
 
     // `get_*` method assumes type is array. if not, throws bad_access
     for (auto&& row : json->get_array())
@@ -326,7 +326,7 @@ std::cout << json_ios_pretty << json << std::endl;
 {
     // std::map<string, ...> is converted json::js_object
     json json = std::map<std::string, int>{{"a", 1}, {"b", 2}};
-    std::cout << json_ios_pretty << json << std::endl;
+    std::cout << json_out_pretty << json << std::endl;
     // makes { "a": 1, "b": 2 }
 }
 ```
@@ -351,7 +351,7 @@ std::cout << json_ios_pretty << json << std::endl;
             return json(js_object{
                 {"title", title},
                 {"value", value},
-            }).to_json_string();
+            }).serialize();
         }
     };
 
@@ -386,11 +386,11 @@ std::cout << json_ios_pretty << json << std::endl;
     //      {"title": "the answer is", "value": 44},
     //      {"title": "the answer is", "value": 45}
     //  ]
-    std::cout << json_ios_pretty << DEBUG_OUTPUT(json);
+    std::cout << json_out_pretty << DEBUG_OUTPUT(json);
 
     // tuple is converted into array
     json json2 = std::tuple<int, double, custom_struct>{42, 42.195, {"hello", 12345}};
-    std::cout << json_ios_pretty << DEBUG_OUTPUT(json2);
+    std::cout << json_out_pretty << DEBUG_OUTPUT(json2);
     // makes
     // [
     //    42,
@@ -522,7 +522,7 @@ struct nanojson3::json::json_ext<Matrix3x3f>
     // Output float format can be set by i/o manipulators.
     [[maybe_unused]] auto i = std::cout.flags() & std::ios_base::floatfield;
     std::cout
-        << json_ios_pretty
+        << json_out_pretty
         << DEBUG_OUTPUT(json_from_matrix3x3f);
 }
 ```

@@ -27,7 +27,7 @@ void sample_code_snippets()
     std::cout << std::fixed;
 
     //  ### 🌟 Simple iostream/string i/o interface.
-    std::cout << json_ios_pretty << json::parse(R"([123, 456, "abc"])") << "\n";
+    std::cout << json_out_pretty << json::parse(R"([123, 456, "abc"])") << "\n";
     //[
     //  123,
     //  456,
@@ -40,7 +40,7 @@ void sample_code_snippets()
 
         json json;
         istream >> json;                      // parse input
-        std::cout << json_ios_pretty << json; // output pretty
+        std::cout << json_out_pretty << json; // output pretty
     }
 
     //  ### 🌟 Some loose parse option by flags.
@@ -66,11 +66,12 @@ void sample_code_snippets()
   , // in LOOSE MODE, trailing comma is allowed.
 }
 )"";
-        std::cout << json_ios_pretty << json_reader::parse_json(
-            src, json_reader::option::default_option         // default allows utf-8 bom, unescaped forward slash '/'
-            | json_reader::option::allow_comment             // allows block/line comments
-            | json_reader::option::allow_trailing_comma      // allows comma following last element
-            | json_reader::option::allow_unquoted_object_key // allows naked object key
+        std::cout << json_out_pretty << parse_json(
+            src
+            , json_parse_option::default_option            // default allows utf-8 bom, unescaped forward slash '/'
+            | json_parse_option::allow_comment             // allows block/line comments
+            | json_parse_option::allow_trailing_comma      // allows comma following last element
+            | json_parse_option::allow_unquoted_object_key // allows naked object key
             // or simply `json_reader::loose_option::all` enables all loose option flags.
         );
 
@@ -94,7 +95,7 @@ void sample_code_snippets()
     // ### 🌟 Basic Read/Write Access To Json Object
     {
         // 👇 Sample Input
-        json json = json_reader::parse_json(
+        json json = parse_json(
             R""(
 {
     "null_literal" : null,
@@ -112,7 +113,7 @@ void sample_code_snippets()
     },
     "test_array": [1, 2, 3, "a", "b", "c"]
 }
-)"", json_reader::option::allow_comment);
+)"", json_parse_option::allow_comment);
 
         //  👇 makes parsed.json 
         //  {
@@ -210,7 +211,7 @@ void sample_code_snippets()
         std::cout << DEBUG_OUTPUT(json["this"]["node"]->is_defined());                 // false: doesn't emit bad_access
         std::cout << DEBUG_OUTPUT(json["Non-existent node"]["a child"]->is_defined()); // false: doesn't emit bad_access
 
-        std::cout << json_ios_pretty << json << std::endl;
+        std::cout << json_out_pretty << json << std::endl;
     }
 
     //  ### 🌟 Making JSON Values From Scratch
@@ -222,7 +223,7 @@ void sample_code_snippets()
             a->push_back(123);
             a->push_back("abc");
         }
-        std::cout << json_ios_pretty << json << std::endl;
+        std::cout << json_out_pretty << json << std::endl;
     }
     {
         json json = js_object{
@@ -236,7 +237,7 @@ void sample_code_snippets()
             a->insert_or_assign("e", "abc");
             a->insert_or_assign("f", js_object{{"f1", 123}, {"f2", 456}, {"f3", 789},});
         }
-        std::cout << json_ios_pretty << json << std::endl;
+        std::cout << json_out_pretty << json << std::endl;
     }
 
     //  ### 🌟 Making JSON Values From STL Containers
@@ -249,7 +250,7 @@ void sample_code_snippets()
             {4, 5, 6},
             {7, 8, 9}
         };
-        std::cout << json_ios_pretty << json << std::endl;
+        std::cout << json_out_pretty << json << std::endl;
 
         // `get_*` method assumes type is array. if not, throws bad_access
         for (auto&& row : json->get_array())
@@ -264,7 +265,7 @@ void sample_code_snippets()
     {
         // std::map<string, ...> is converted json_t::js_object
         json json = std::map<std::string, int>{{"a", 1}, {"b", 2}};
-        std::cout << json_ios_pretty << json << std::endl;
+        std::cout << json_out_pretty << json << std::endl;
         // makes { "a": 1, "b": 2 }
     }
 
@@ -284,7 +285,7 @@ void sample_code_snippets()
                 return json(js_object{
                     {"title", title},
                     {"value", value},
-                }).to_json_string();
+                }).serialize();
             }
         };
 
@@ -319,11 +320,11 @@ void sample_code_snippets()
         //      {"title": "the answer is", "value": 44},
         //      {"title": "the answer is", "value": 45}
         //  ]
-        std::cout << json_ios_pretty << DEBUG_OUTPUT(json1);
+        std::cout << json_out_pretty << DEBUG_OUTPUT(json1);
 
         // tuple is converted into array
         json json2 = std::tuple<int, double, custom_struct>{42, 42.195, {"hello", 12345}};
-        std::cout << json_ios_pretty << DEBUG_OUTPUT(json2);
+        std::cout << json_out_pretty << DEBUG_OUTPUT(json2);
         // makes
         // [
         //    42,
@@ -445,7 +446,7 @@ void fixed_user_defined_types()
     // Output float format can be set by i/o manipulators.
     [[maybe_unused]] auto i = std::cout.flags() & std::ios_base::floatfield;
     std::cout
-        << json_ios_pretty
+        << json_out_pretty
         << DEBUG_OUTPUT(json_from_matrix3x3f);
 }
 
