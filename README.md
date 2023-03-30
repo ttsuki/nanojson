@@ -406,107 +406,102 @@ std::cout << json_out_pretty << json << std::endl;
 😕.o( if a user-defined type is in another library and it cannot be changed, what should I do? )
 
 
-### 🌟 Adding User-defined Json Importer (User-defined json Constructor Extension)
+
+### 🌟 Adding User-defined JSON Serializer (User-defined JSON Constructor Extension)
 The nanojson provides constructor extension interface.
 
-This is an additional json importer which converts `std::tuple<...>` into `js_array`. (defined in nanojson3.h)
-```cpp
-//.cpp
-
-// map `std::tuple<U...>` to `js_array`
-template <class...U>
-struct json::json_ext<
-    std::tuple<U...>,
-    std::enable_if_t<std::conjunction_v<std::is_constructible<json, U>...>>
-    >
-{
-    static js_array serialize(const std::tuple<U...>& val) {
-        return std::apply(
-            [](auto&& ...x) {
-                return js_array{{json(std::forward<decltype(x)>(x))...}};
-            },
-            std::forward<decltype(val)>(val));
-    }
-};
-```
-
-The prototype of `json::json_ext` is
-```cpp
-//.cpp
-   template <class T, class U = void> struct json::json_ext;
-   // T is source type.
-   // U is placeholder for void_t in specializations. (for std::enable_if_t or std::void_t)
-```
-
-Your task is implementing `static TYPE serialize(T) { ... }` which returns any of json types `js_null`, `js_integer`, `js_floating`, `js_string`, `js_array`, `js_object`, or `json` or another json convertible type.
-
-If `json(T)` constructor can find out that specialization, type `T` can be convertible to json by `json` constructor.
 
 👇 Here are unchangeable `Vector3f` and `Matrix3x3f` provided by another library.
 
 ```cpp
 //.cpp
-
-struct Vector3f final
+namespace foobar_library
 {
-    float x, y, z;
-};
+    struct Vector3f final
+    {
+        float x, y, z;
+    };
 
-struct Matrix3x3f final
-{
-    Vector3f row0, row1, row2;
-};
+    struct Matrix3x3f final
+    {
+        Vector3f row0, row1, row2;
+    };
+}
 ```
 
-👇 You can write specialization of `json_ext` which serializes `Vector3f` into json
+👇 You can specialize the `json_serializer` class template to serialize `Vector3f` into `json`.
+
+The prototype of `json_serializer` is
 
 ```cpp
-//.cpp
-
-// json constructor extension for `Vector3f`
-template <>
-struct nanojson3::json::json_ext<Vector3f>
+// cpp
+namespace nanojson3
 {
-    static auto serialize(const Vector3f& val)
+    template <class T, class U = void> // T is source type.
+    struct json_serializer             // U is placeholder for specializations. (std::enable_if_t or std::void_t)
     {
-        //*/ // Serialize Vector3f into `js_object`
+        static json serialize(T value) { return /* implement here! */; }
+    };
+}
+```
+
+Making such specialization for type `T` makes `json(T)` constructor callable.
+
+Let `json_serializer<Vector3f>` as
+
+```cpp
+// cpp
+
+// Vector3f JSON serializer
+template <>
+struct nanojson3::json_serializer<foobar_library::Vector3f>
+{
+    static json serialize(const foobar_library::Vector3f& val)
+    {
         return js_object
         {
             {"x", val.x},
             {"y", val.y},
             {"z", val.z},
         };
-        /*/ // or simply `js_array`.
-        return js_array{ val.x, val.y, val.z };
-        //*/
-    }
-};
-
-// json constructor extension for `Matrix3x3f`
-template <>
-struct nanojson3::json::json_ext<Matrix3x3f>
-{
-    static auto serialize(const Matrix3x3f& val)
-    {
-        // array<Vector3f, N> is json convertible with `json_ext<Vector3f>`.
-        return std::array<Vector3f, 3>{val.row0, val.row1, val.row2};
     }
 };
 ```
-👇 then use it.
+
+👇 Or, just implement `to_json(T)` ADL or global function also makes `json(T)` constructor callable.
+(but it may cause conflicts with the original `foobar_library`'s functions).
+
+```cpp
+// cpp
+
+namespace foobar_library
+{
+    static nanojson3::json to_json(const foobar_library::Matrix3x3f& val)
+    {
+        // std::array<Vector3f, N> will be converted to `json` via another `json_serializer`.
+        return std::array<foobar_library::Vector3f, 3>{val.row0, val.row1, val.row2};
+    }
+}
+```
+
+👇 then we can use it.
+
 ```cpp
 //.cpp
 
+
+void fixed_user_defined_types()
 {
     using namespace nanojson3;
+    const foobar_library::Vector3f input = {1.0f, 2.0f, 3.0f};
 
-    Vector3f input = {1.0f, 2.0f, 3.0f};
-    json json_from_vector3f = input; // Convert Vector3f into json by `json_ext<Vector3f>`
+    // Convert Vector3f into json by `json_serializer<Vector3f>`
+    json json_from_vector3f = input;
     std::cout << std::fixed << DEBUG_OUTPUT(json_from_vector3f);
     // makes output like {"x":1.0000,"y":2.0000,"z":3.0000}.
 
-    // With other json convertible containers.
-    json json_from_matrix3x3f = std::vector<Matrix3x3f>{
+    // Convert Matrix3x3f into json by `foobar_library::to_json`
+    json json_from_matrix3x3f = std::vector<foobar_library::Matrix3x3f>{
         {
             {1.0f, 2.0f, 3.0f},
             {4.0f, 5.0f, 6.0f},
@@ -520,12 +515,11 @@ struct nanojson3::json::json_ext<Matrix3x3f>
     };
 
     // Output float format can be set by i/o manipulators.
-    [[maybe_unused]] auto i = std::cout.flags() & std::ios_base::floatfield;
-    std::cout
-        << json_out_pretty
-        << DEBUG_OUTPUT(json_from_matrix3x3f);
+    std::cout << std::fixed << std::setprecision(3) << json_out_pretty << DEBUG_OUTPUT(json_from_matrix3x3f);
+    std::cout << std::scientific << std::setprecision(16) << json_out_pretty << DEBUG_OUTPUT(json_from_matrix3x3f);
 }
 ```
+
 
 ### 🌟 Built-in constructor extensions
 

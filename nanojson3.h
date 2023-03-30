@@ -29,20 +29,14 @@
 #include <string_view>
 #include <vector>
 #include <iterator>
+#include <initializer_list>
+#include <tuple>
 
 #include <istream>
 #include <ostream>
 #include <iomanip>
 #include <charconv>
 #include <sstream>
-
-#include <initializer_list>
-#include <array>
-#include <tuple>
-#include <set>
-#include <unordered_set>
-#include <map>
-#include <unordered_map>
 
 #if !((defined(__cplusplus) && __cplusplus >= 201703L) || (defined(_MSVC_LANG) && _MSVC_LANG >= 201703L))
 #error "nanojson needs C++17 support."
@@ -168,16 +162,16 @@ namespace nanojson3
             }
 
             // O(n)
-            template <class KeyView, enable_if_t<is_key_view_type<KeyView>>  = enabled{}>
-            [[nodiscard]] mapped_type& at(const KeyView& key)
+            template <class Key, enable_if_t<is_key_view_type<Key>>  = enabled{}>
+            [[nodiscard]] mapped_type& at(const Key& key)
             {
                 if (auto it = find(key); it != end()) return it->second;
                 else throw std::out_of_range("no such key");
             }
 
             // O(n)
-            template <class KeyView, enable_if_t<is_key_view_type<KeyView>>  = enabled{}>
-            [[nodiscard]] const mapped_type& at(const KeyView& key) const
+            template <class Key, enable_if_t<is_key_view_type<Key>>  = enabled{}>
+            [[nodiscard]] const mapped_type& at(const Key& key) const
             {
                 if (auto it = find(key); it != end()) return it->second;
                 else throw std::out_of_range("no such key");
@@ -369,6 +363,20 @@ namespace nanojson3
     {
         std::chars_format floating_format = std::chars_format::general; // general, fixed, scientific
         int floating_precision = 7;
+    };
+
+    // json_serializer : placeholder
+    template <class T, class U = void>
+    struct json_serializer
+    {
+        // To make your type json-serializable,
+        // specialize this class and implement the following method for your type `T`.
+        //   static json serialize(T value) { return json{ /* implement here */ }; }
+
+        template <class X> static void serialize(X&&)
+        {
+            /* dummy serializer for prevent unintended type conversion. */
+        }
     };
 
     /// json: represents a json element
@@ -699,16 +707,15 @@ namespace nanojson3
         [[nodiscard]] json_string serialize(json_serialize_option opt = json_serialize_option::none, json_floating_format_options format = json_floating_format_options{}) const;
 
     public:
-        // extensive constructors
-        template <class T, class U = void> struct json_ext;
+        template <class T, std::enable_if_t<!std::is_same_v<decltype(json_serializer<std::decay_t<T>>::serialize(std::declval<T>())), json>>* = nullptr>
+        json(T) = delete; // prevent implicit conversion
 
-        // copy construct
-        template <class T, std::void_t<decltype(json_ext<std::decay_t<const T&>>::serialize(std::declval<const T&>()))>* = nullptr>
-        json(const T& value) : json(json_ext<std::decay_t<const T&>>::serialize(std::forward<const T>(value))) { }
+        // serialize construct
+        template <class T, std::enable_if_t<std::is_same_v<decltype(json_serializer<std::decay_t<T>>::serialize(std::declval<T>())), json>>* = nullptr>
+        json(T&& value) : json(json_serializer<std::decay_t<T>>::serialize(std::forward<T>(value))) { }
 
-        // move construct
-        template <class T, std::enable_if_t<std::is_rvalue_reference_v<T>, std::void_t<decltype(json_ext<std::decay_t<T>>::serialize(std::declval<T>()))>>* = nullptr>
-        json(T&& value) : json(json_ext<std::decay_t<T>>::serialize(std::forward<T>(value))) { }
+        template <class E, std::enable_if_t<std::is_same_v<decltype(json_serializer<std::initializer_list<E>>::serialize(std::declval<std::initializer_list<E>>())), json>>* = nullptr>
+        json(std::initializer_list<E>&& value) : json(json_serializer<std::decay_t<std::initializer_list<E>>>::serialize(std::forward<std::initializer_list<E>>(value))) { }
     };
 
     template <class CharInputIterator>
@@ -1580,136 +1587,6 @@ namespace nanojson3
 
     inline json::json_string json::serialize(json_serialize_option opt, json_floating_format_options format) const { return io::serialize_json(*this, opt, format); }
 
-    ////
-    //// json_t::json_ext specializations
-    ////
-
-    namespace json_ext_ctor_helper
-    {
-        struct prevent_conversion { };
-
-        template <class T>
-        struct static_cast_to_value
-        {
-            template <class U>
-            static T serialize(U val)
-            {
-                return static_cast<T>(val);
-            }
-        };
-
-        template <class T>
-        struct pass_to_value_ctor
-        {
-            template <class U>
-            static T serialize(U&& val)
-            {
-                return T{std::forward<U>(val)};
-            }
-        };
-
-        template <class T>
-        struct pass_iterator_pair_to_value_ctor
-        {
-            template <class U>
-            static T serialize(U&& val)
-            {
-                return T(std::begin(val), std::end(val));
-            }
-        };
-    }
-
-    // built-in ext ctor for primitives.
-    template <class T> struct json::json_ext<T, std::enable_if_t<std::is_pointer_v<T>>> : json_ext_ctor_helper::prevent_conversion { };                           // prevent `bool` constructor by pointer types
-    template <class T> struct json::json_ext<T, std::enable_if_t<std::is_integral_v<T>>> : json_ext_ctor_helper::static_cast_to_value<js_integer> { };            // map all integral types (`char`, `int`, `unsigned long`, ...) to `int_t`: hint: this is also true for `bool`, but concrete constructor `json_t(bool)` is selected in the real calling situation
-    template <class T> struct json::json_ext<T, std::enable_if_t<std::is_floating_point_v<T>>> : json_ext_ctor_helper::static_cast_to_value<js_floating> { };     // map all floating point types (`float`, `double`, ...) to `float_t` (`std::is_floating_point<T>`)
-    template <> struct json::json_ext<const json::char_type*> : json_ext_ctor_helper::pass_to_value_ctor<js_string> { };                                          // map `const char*` to `string_t`
-    template <> struct json::json_ext<std::basic_string_view<json::char_type, json::char_traits>> : json_ext_ctor_helper::pass_to_value_ctor<js_string> { };      // map `std::string_view` to `string_t`
-    template <class A> struct json::json_ext<std::basic_string<json::char_type, json::char_traits, A>> : json_ext_ctor_helper::pass_to_value_ctor<js_string> { }; // map `std::string` to `string_t`
-
-    // built-in ext ctor for array_t: map some STL container`<T>` to `array_t`, if `T` is convertible json_t.
-    template <class U> struct json::json_ext<std::initializer_list<U>, std::enable_if_t<std::is_constructible_v<json, U>>> : json_ext_ctor_helper::pass_iterator_pair_to_value_ctor<js_array> { };                           // map `std::initializer_list<T>` to `array_t`
-    template <class U, size_t S> struct json::json_ext<std::array<U, S>, std::enable_if_t<std::is_constructible_v<json, U>>> : json_ext_ctor_helper::pass_iterator_pair_to_value_ctor<js_array> { };                         // map `std::vector<T>` to `array_t`
-    template <class U, class A> struct json::json_ext<std::vector<U, A>, std::enable_if_t<std::is_constructible_v<json, U>>> : json_ext_ctor_helper::pass_iterator_pair_to_value_ctor<js_array> { };                         // map `std::array<T, n>` to `array_t`
-    template <class U, class A> struct json::json_ext<std::set<U, A>, std::enable_if_t<std::is_constructible_v<json, U>>> : json_ext_ctor_helper::pass_iterator_pair_to_value_ctor<js_array> { };                            // map `std::set<T>` to `array_t`
-    template <class U, class A> struct json::json_ext<std::multiset<U, A>, std::enable_if_t<std::is_constructible_v<json, U>>> : json_ext_ctor_helper::pass_iterator_pair_to_value_ctor<js_array> { };                       // map `std::multiset<T>` to `array_t`
-    template <class U, class P, class A> struct json::json_ext<std::unordered_set<U, P, A>, std::enable_if_t<std::is_constructible_v<json, U>>> : json_ext_ctor_helper::pass_iterator_pair_to_value_ctor<js_array> { };      // map `std::unordered_set<T>` to `array_t`
-    template <class U, class P, class A> struct json::json_ext<std::unordered_multiset<U, P, A>, std::enable_if_t<std::is_constructible_v<json, U>>> : json_ext_ctor_helper::pass_iterator_pair_to_value_ctor<js_array> { }; // map `std::unordered_multiset<T>` to `array_t`
-
-    template <class... U> struct json::json_ext<std::tuple<U...>, std::enable_if_t<std::conjunction_v<std::is_constructible<json, U>...>>> // map `std::tuple<T...>` to `array_t`
-    {
-        static js_array serialize(const std::tuple<U...>& val) { return std::apply([](auto&&... x) { return js_array{{json(std::forward<decltype(x)>(x))...}}; }, std::forward<decltype(val)>(val)); }
-        static js_array serialize(std::tuple<U...>&& val) { return std::apply([](auto&&... x) { return js_array{{json(std::forward<decltype(x)>(x))...}}; }, std::forward<decltype(val)>(val)); }
-    };
-
-    // built-in ext ctor for object_t: map some STL container`<K, T>` to `object_t`, if `K` is convertible string and `T` is convertible json_t.
-    template <class K, class U, class P, class A> struct json::json_ext<std::map<K, U, P, A>, std::enable_if_t<std::is_convertible_v<K, json::js_object_key_view> && std::is_constructible_v<json, U>>> : json_ext_ctor_helper::pass_iterator_pair_to_value_ctor<js_object> { };           // map `std::map<K, T>` to `object_t`
-    template <class K, class U, class P, class A> struct json::json_ext<std::unordered_map<K, U, P, A>, std::enable_if_t<std::is_convertible_v<K, json::js_object_key_view> && std::is_constructible_v<json, U>>> : json_ext_ctor_helper::pass_iterator_pair_to_value_ctor<js_object> { }; // map `std::unordered_map<K, T>` to `object_t`
-
-    // built-in ext ctor for to_json types: some types which has `to_json()` function to `json_t`
-
-    // If `T` has a member function `json_t to_json() const;`:
-    template <class T>
-    struct json::json_ext<
-            T,
-            std::enable_if_t<
-                std::is_same_v<std::invoke_result_t<decltype(&T::to_json), const T&>, json>
-            >>
-    {
-        static json serialize(const T& val)
-        {
-            return val.to_json();
-        }
-    };
-
-    // else If `T` has the member function `R to_json() const;` where `R` is convertible to json_string_view:
-    template <class T>
-    struct json::json_ext<
-            T,
-            std::enable_if_t<
-                !std::is_same_v<std::invoke_result_t<decltype(&T::to_json), const T&>, json> &&
-                std::is_convertible_v<std::invoke_result_t<decltype(&T::to_json), const T&>, json::json_string_view>
-            >>
-    {
-        static json serialize(const T& val)
-        {
-            return json::parse(val.to_json());
-        }
-    };
-
-    // else If there is the global/ADL function `json_t to_json(T);`:
-    template <class T>
-    struct json::json_ext<
-            T,
-            std::enable_if_t<
-                !std::is_same_v<std::invoke_result_t<decltype(&T::to_json), const T&>, json> &&
-                !std::is_convertible_v<std::invoke_result_t<decltype(&T::to_json), const T&>, json::json_string_view> &&
-                std::is_same_v<std::invoke_result_t<decltype(to_json(std::declval<T>())), const T&>, json>
-            >>
-    {
-        static json serialize(const T& val)
-        {
-            return to_json(val);
-        }
-    };
-
-    // else If there is the global/ADL function `R to_json(T);` where `R` is convertible to json_string_view:
-    template <class T>
-    struct json::json_ext<
-            T,
-            std::enable_if_t<
-                !std::is_same_v<std::invoke_result_t<decltype(&T::to_json), const T&>, json> &&
-                !std::is_convertible_v<std::invoke_result_t<decltype(&T::to_json), const T&>, json::json_string_view> &&
-                !std::is_same_v<std::invoke_result_t<decltype(to_json(std::declval<T>())), const T&>, json> &&
-                std::is_convertible_v<std::invoke_result_t<decltype(to_json(std::declval<T>()))>, json::json_string_view>
-            >>
-    {
-        static json serialize(const T& val)
-        {
-            return json::parse(to_json(val));
-        }
-    };
-
     // i/o stream operators
     namespace ios
     {
@@ -1798,8 +1675,130 @@ namespace nanojson3
     static constexpr auto json_in_loose = json_ios_option(json_parse_option::all);
     static constexpr auto json_out_pretty = json_ios_option(json_serialize_option::pretty);
 
-    // type exports
 
+    // json_serializer specializations
+
+    namespace json_serializer_helper
+    {
+        struct do_not_serialize
+        {
+            template <class U> static void serialize(U&&) { }
+        };
+
+        template <class T> struct serialize_via_static_cast
+        {
+            template <class U> static json serialize(U&& val) { return static_cast<T>(val); }
+        };
+
+        template <class T> struct serialize_via_constructor
+        {
+            template <class U> static json serialize(U&& val) { return T{std::forward<U>(val)}; }
+        };
+
+        template <class T> struct serialize_via_range_constructor
+        {
+            template <class U> static json serialize(U&& val) { return T(std::begin(std::forward<U>(val)), std::end(std::forward<U>(val))); }
+        };
+
+        // type_traits
+
+        template <class Container, class = void>
+        struct get_container_value_type {};
+
+        template <class Container>
+        struct get_container_value_type<Container, std::enable_if_t<std::is_same_v<decltype(std::begin(std::declval<Container>())), decltype(std::end(std::declval<Container>()))>>>
+        {
+            using value_reference_type = decltype(*std::begin(std::declval<Container>()));
+            using value_type = std::decay_t<value_reference_type>;
+        };
+
+        template <class Container>
+        using container_value_type_t = typename get_container_value_type<Container>::value_type;
+    }
+
+
+    // map all integral types (except `char`) to `js_integer`
+    template <class T> struct json_serializer<T, std::enable_if_t<std::is_integral_v<T> && !std::is_same_v<T, json::char_type>>>
+        : json_serializer_helper::serialize_via_static_cast<json::js_integer> { };
+
+    // map all floating point types to `js_floating`
+    template <class T> struct json_serializer<T, std::enable_if_t<std::is_floating_point_v<T>>>
+        : json_serializer_helper::serialize_via_static_cast<json::js_floating> { };
+
+    // map `const char*` to `js_string`
+    template <> struct json_serializer<const json::char_type*>
+        : json_serializer_helper::serialize_via_constructor<json::js_string> { };
+
+    // map `container<char>` to `js_string`
+    template <class CharContainer>
+    struct json_serializer<CharContainer, std::enable_if_t<
+                               std::is_same_v<json_serializer_helper::container_value_type_t<CharContainer>, json::char_type>
+                           >>
+        : json_serializer_helper::serialize_via_range_constructor<json::js_string> { };
+
+    // map `container<T>` to `js_array` if `T` is json-convertible to .
+    template <class Container>
+    struct json_serializer<Container, std::enable_if_t<
+                               std::is_convertible_v<json_serializer_helper::container_value_type_t<Container>, json>
+                           >>
+        : json_serializer_helper::serialize_via_range_constructor<json::js_array> { };
+
+    // map `std::tuple<U...>` to `js_array` if all of `U...` is json-convertible
+    template <class... U>
+    struct json_serializer<std::tuple<U...>, std::enable_if_t<std::conjunction_v<std::is_convertible<U, json>...>>>
+    {
+        template <class T> static json serialize(T&& val)
+        {
+            return std::apply([](auto&&... x) { return json::js_array{{json(std::forward<decltype(x)>(x))...}}; }, std::forward<decltype(val)>(val));
+        }
+    };
+
+    // map `container<[K,V]>` to `js_object` if `K` is js_object_key-convertible and `V` is json-convertible
+    template <class Container>
+    struct json_serializer<Container, std::enable_if_t<
+                               std::is_convertible_v<decltype(json_serializer_helper::container_value_type_t<Container>::first), json::js_object_key_view> &&
+                               std::is_convertible_v<decltype(json_serializer_helper::container_value_type_t<Container>::second), json>
+                           >>
+    {
+        template <class T> static json serialize(T&& val)
+        {
+            json j = json::js_object();
+            auto o = j->as_object();
+            for (auto&& [k, v] : val)
+                o->insert_or_assign(k, v);
+            return j;
+        }
+    };
+
+    // map `T` to `json` if `T` has member function `json T::to_json() const`
+    template <class T>
+    struct json_serializer<T, std::enable_if_t<std::is_convertible_v<std::invoke_result_t<decltype(&T::to_json), const T&>, json::json_string_view>>>
+    {
+        template <class U> static json serialize(U&& val) { return json::parse(val.to_json()); }
+    };
+
+    // map `T` to `json` if there is ADL/global function `json_string to_json(T)`
+    template <class T>
+    struct json_serializer<T, std::enable_if_t<std::is_convertible_v<decltype(to_json(std::declval<T>())), json::json_string_view>>>
+    {
+        template <class U> static json serialize(U&& val) { return json::parse(to_json(std::forward<U>(val))); }
+    };
+
+    // map `T` to `json` if `T` has member function `json T::to_json() const`
+    template <class T>
+    struct json_serializer<T, std::enable_if_t<std::is_same_v<std::invoke_result_t<decltype(&T::to_json), const T&>, json>>>
+    {
+        template <class U> static json serialize(U&& val) { return val.to_json(); }
+    };
+
+    // map `T` to `json` if there is ADL/global function `json to_json(T)`
+    template <class T>
+    struct json_serializer<T, std::enable_if_t<std::is_same_v<decltype(to_json(std::declval<T>())), json>>>
+    {
+        template <class U> static json serialize(U&& val) { return to_json(std::forward<U>(val)); }
+    };
+
+    // type exports
     using js_undefined = json::js_undefined;
     using js_null = json::js_null;
     using js_boolean = json::js_boolean;
@@ -1811,5 +1810,6 @@ namespace nanojson3
     using js_object = json::js_object;
 
     using json_string = json::json_string;
+    using json_string_view = json::json_string_view;
 }
 #endif
