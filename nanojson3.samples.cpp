@@ -4,7 +4,7 @@
  * This software is released under the MIT License.
  */
 
-#include "nanojson2.h"
+#include "nanojson3.h"
 
 #include <iostream>
 #include <sstream>
@@ -22,7 +22,7 @@ void sample_code_snippets()
 {
     //  ## 🌟 Sample Code Snippets
     //  😃 Here, some snippets may be useful to learn usage of this library.
-    using namespace nanojson2;
+    using namespace nanojson3;
 
     std::cout << std::fixed;
 
@@ -280,7 +280,7 @@ void sample_code_snippets()
             // returns json string (or json_t)
             [[nodiscard]] std::string to_json() const
             {
-                using namespace nanojson2;
+                using namespace nanojson3;
                 return json_t(object_t{
                     {"title", title},
                     {"value", value},
@@ -389,7 +389,7 @@ struct Matrix3x3f final
 
 // json constructor extension for `Vector3f`
 template <>
-struct nanojson2::json_t::json_ext<Vector3f>
+struct nanojson3::json_t::json_ext<Vector3f>
 {
     static auto serialize(const Vector3f& val)
     {
@@ -408,7 +408,7 @@ struct nanojson2::json_t::json_ext<Vector3f>
 
 // json constructor extension for `Matrix3x3f`
 template <>
-struct nanojson2::json_t::json_ext<Matrix3x3f>
+struct nanojson3::json_t::json_ext<Matrix3x3f>
 {
     static auto serialize(const Matrix3x3f& val)
     {
@@ -421,7 +421,7 @@ struct nanojson2::json_t::json_ext<Matrix3x3f>
 
 void fixed_user_defined_types()
 {
-    using namespace nanojson2;
+    using namespace nanojson3;
 
     Vector3f input = {1.0f, 2.0f, 3.0f};
     json_t json_from_vector3f = input; // Convert Vector3f into json by `json_ext<Vector3f>`
@@ -502,7 +502,7 @@ int main()
 
 static void more_test()
 {
-    using namespace nanojson2;
+    using namespace nanojson3;
     try
     {
         for (auto i : json_t::parse(R"(

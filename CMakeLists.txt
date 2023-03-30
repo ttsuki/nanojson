@@ -1,5 +1,5 @@
 cmake_minimum_required (VERSION 3.8)
-project(nanojson2 LANGUAGES CXX)
+project(nanojson3 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -11,4 +11,4 @@ else()
     add_compile_options(-Wall -Wextra -pedantic)
 endif()
 
-add_executable (nanojson2 "nanojson2.h" "nanojson2.samples.cpp")
+add_executable (nanojson3 "nanojson3.h" "nanojson3.samples.cpp")

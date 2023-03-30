@@ -1,6 +1,6 @@
 /** @file
  * nanojson: A Simple JSON Reader/Writer For C++17
- * Copyright (c) 2016-2022 ttsuki
+ * Copyright (c) 2016-2023 ttsuki
  * This software is released under the MIT License.
  */
 
@@ -8,8 +8,8 @@
 // This project is an experiment, proof-of-concept, implementation of json library on standard C++17 functions.
 
 #pragma once
-#ifndef NANOJSON2_H_INCLUDED
-#define NANOJSON2_H_INCLUDED
+#ifndef NANOJSON3_H_INCLUDED
+#define NANOJSON3_H_INCLUDED
 
 #include <cstddef>
 #include <cassert>
@@ -49,7 +49,7 @@
 #pragma message("nanojson needs C++17 Elementary string conversions (P0067R5) including Floating-Point (FP) values support. See (https://en.cppreference.com/w/cpp/compiler_support/17#:~:text=Elementary%20string%20conversions) This time, falling back to an implementation with stringstream instead.")
 #endif
 
-namespace nanojson2
+namespace nanojson3
 {
     inline namespace exceptions
     {

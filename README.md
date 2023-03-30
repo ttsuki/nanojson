@@ -1,15 +1,15 @@
-# nanojson (v2) - Simple json reader/writer for C++17
+# nanojson (v3) - Simple json reader/writer for C++17
 
-🌟 Single C++ header only. ALL in [nanojson2.h](nanojson2.h).
+🌟 Single C++ header only. ALL in [nanojson3.h](nanojson3.h).
 
 This project is an experimental, proof-of-concept, implementation of json library using modern C++17 functions.
 
-This is the version 2 of the nanojson library, which is wrote from scrach.
-There is no API compatiblity from previous version of the nanojson.
-The previous version is in `v1` branch.
+This is the version 3 of the nanojson library, which is wrote from scratch.
+There is no API compatibility from previous version of the nanojson.
+The previous version is in `v1` or `v2` branch.
 
 ## 🌟 License
-[MIT License. (c) 2016-2022 ttsuki](LICENSE)
+[MIT License. (c) 2016-2023 ttsuki](LICENSE)
 
 ## 🌟 The Concept ⚡
 
@@ -54,12 +54,12 @@ class json_t
 
 😃 Here, some snippets may be useful to learn usage of this library.
 
-[nanojson2.samples.cpp](nanojson2.samples.cpp)
+[nanojson3.samples.cpp](nanojson3.samples.cpp)
 
 ### 🌟 Simple iostream/string i/o interface.
 
 ```cpp
-using namespace nanojson2;
+using namespace nanojson3;
 std::cout << json_ios_pretty << json_t::parse(R"([123, 456, "abc"])") << "\n";
 ```
 
@@ -347,7 +347,7 @@ std::cout << json_ios_pretty << json << std::endl;
         // returns json string (or json_t)
         [[nodiscard]] std::string to_json() const
         {
-            using namespace nanojson2;
+            using namespace nanojson3;
             return json_t(object_t{
                 {"title", title},
                 {"value", value},
@@ -409,7 +409,7 @@ std::cout << json_ios_pretty << json << std::endl;
 ### 🌟 Adding User-defined Json Importer (User-defined json_t Constructor Extension)
 The nanojson provides constructor extension interface.
 
-This is an additional json importer which converts `std::tuple<...>` into `array_t`. (defined in nanojson2.h)
+This is an additional json importer which converts `std::tuple<...>` into `array_t`. (defined in nanojson3.h)
 ```cpp
 //.cpp
 
@@ -465,7 +465,7 @@ struct Matrix3x3f final
 
 // json constructor extension for `Vector3f`
 template <>
-struct nanojson2::json_t::json_ext<Vector3f>
+struct nanojson3::json_t::json_ext<Vector3f>
 {
     static auto serialize(const Vector3f& val)
     {
@@ -484,7 +484,7 @@ struct nanojson2::json_t::json_ext<Vector3f>
 
 // json constructor extension for `Matrix3x3f`
 template <>
-struct nanojson2::json_t::json_ext<Matrix3x3f>
+struct nanojson3::json_t::json_ext<Matrix3x3f>
 {
     static auto serialize(const Matrix3x3f& val)
     {
@@ -498,7 +498,7 @@ struct nanojson2::json_t::json_ext<Matrix3x3f>
 //.cpp
 
 {
-    using namespace nanojson2;
+    using namespace nanojson3;
 
     Vector3f input = {1.0f, 2.0f, 3.0f};
     json_t json_from_vector3f = input; // Convert Vector3f into json by `json_ext<Vector3f>`
@@ -529,7 +529,7 @@ struct nanojson2::json_t::json_ext<Matrix3x3f>
 
 ### 🌟 Built-in constructor extensions
 
-The nanojson provides some built-in specializations and helper classes (in `nanojson2.h`).
+The nanojson provides some built-in specializations and helper classes (in `nanojson3.h`).
 
 The importing functions for STL objects described above are implemented as constructor extensions.
 
@@ -553,9 +553,9 @@ The importing functions for STL objects described above are implemented as const
   - map `std::unordered_map<K, T>` to `object_t`
 - built-in ext ctor for to_json types: some types which has `to_json()` function to `json_t`
   - enable_if `T` has `string T::to_json() const;`
-  - enable_if `T` has `nanojson2::json_t T::to_json() const;`
+  - enable_if `T` has `nanojson3::json_t T::to_json() const;`
   - enable_if `T` does not have `T::to_json() const;` and `string to_json(T);` is available  in global/ADL.
-  - enable_if `T` does not have `T::to_json() const;` and `nanojson2::json_t to_json(T);` is available in global/ADL.
+  - enable_if `T` does not have `T::to_json() const;` and `nanojson3::json_t to_json(T);` is available in global/ADL.
 
 ### 🌟 EOF
 
