@@ -61,8 +61,7 @@ class json
 ### 🌟 Simple iostream/string i/o interface.
 
 ```cpp
-using namespace njs3;
-std::cout << json_out_pretty << json::parse(R"([123, 456, "abc"])") << "\n";
+std::cout << njs3::json_out_pretty << njs3::json::parse(R"([123, 456, "abc"])") << "\n";
 ```
 
 ```json
@@ -74,9 +73,9 @@ std::cout << json_out_pretty << json::parse(R"([123, 456, "abc"])") << "\n";
 ```
 
 ```cpp
-json json;
-std::cin >> json;                     // parse input
-std::cout << json_out_pretty << json; // output pretty
+njs3::json json;
+istream >> json;                      // parse input
+std::cout << njs3::json_out_pretty << json; // output pretty
 ```
 
 ### 🌟 Some loose parse option by flags.
@@ -108,13 +107,13 @@ auto src = R""(
 )"";
 ```
 ```cpp
-std::cout << json_out_pretty << json_reader::parse_json(
+std::cout << njs3::json_out_pretty << parse_json(
     src
-    , json_parse_option::default_option            // default allows utf-8 bom, unescaped forward slash '/'
-    | json_parse_option::allow_comment             // allows block/line comments
-    | json_parse_option::allow_trailing_comma      // allows comma following last element
-    | json_parse_option::allow_unquoted_object_key // allows naked object key
-    // or simply `json_parse_option::all` enables all loose option flags.
+    , njs3::json_parse_option::default_option            // default allows utf-8 bom, unescaped forward slash '/'
+    | njs3::json_parse_option::allow_comment             // allows block/line comments
+    | njs3::json_parse_option::allow_trailing_comma      // allows comma following last element
+    | njs3::json_parse_option::allow_unquoted_object_key // allows naked object key
+    // or simply ` njs3::json_parse_option::all` enables all loose option flags.
 );
 ```
 
@@ -140,7 +139,7 @@ std::cout << json_out_pretty << json_reader::parse_json(
 
 👇 input
 ````cpp
-json json = json_reader::parse_json(R""(
+njs3::json json = njs3::parse_json(R""(
 ````
 ```js
 {
@@ -161,8 +160,8 @@ json json = json_reader::parse_json(R""(
 }
 ```
 ````cpp
-)"", json_reader::loose_option::allow_comment);
-std::cout << json_out_pretty << json;
+)"", njs3::json_parse_option::allow_comment);
+std::cout << njs3::json_out_pretty << json;
 ````
 
 👇 The Output `.json` is
@@ -210,24 +209,24 @@ try
 {
     json["this"]["node"] = 123; // throws bad_access: invalid reference
 }
-catch (const bad_access& x)
+catch (const njs3::bad_access& x)
 {
     std::cerr << x.what() << std::endl;
 }
 
 // Reading access:
 
-js_integer integer = json["integer"]->get_integer(); // OK
-//js_floating integer = json["integer"]->get_floating(); // throws bad_access (type mismatch)
+njs3::js_integer integer = json["integer"]->get_integer(); // OK
+//njs3::js_floating integer = json["integer"]->get_floating(); // throws bad_access (type mismatch)
 std::cout << DEBUG_OUTPUT(integer);
 
-js_floating float1 = json["float1"]->get_floating(); // OK
-//js_integer float1 = json["float1"]->get_integer();   // throws bad_access (type mismatch)
+njs3::js_floating float1 = json["float1"]->get_floating(); // OK
+//njs3::js_integer float1 = json["float1"]->get_integer();   // throws bad_access (type mismatch)
 std::cout << DEBUG_OUTPUT(float1);
 
-js_floating integer_as_number = json["integer"]->get_number(); // OK (converted to js_floating)
-js_floating float1_as_number = json["float1"]->get_number();   // OK
-js_floating float2_as_number = json["float2"]->get_number();   // OK
+njs3::js_floating integer_as_number = json["integer"]->get_number(); // OK (converted to js_floating)
+njs3::js_floating float1_as_number = json["float1"]->get_number();   // OK
+njs3::js_floating float2_as_number = json["float2"]->get_number();   // OK
 std::cout << DEBUG_OUTPUT(integer_as_number);
 std::cout << DEBUG_OUTPUT(float1_as_number);
 std::cout << DEBUG_OUTPUT(float2_as_number);
@@ -244,7 +243,7 @@ try
     (void)json["this"]->get_integer();        // throws bad_access: json["this"] is string.
     (void)json["this"]["foobar"]->get_null(); // throws bad_access: json["this"]["foobar"] is undefined (not a null).
 }
-catch (const bad_access& x)
+catch (const njs3::bad_access& x)
 {
     std::cerr << x.what() << std::endl;
 }
@@ -271,29 +270,29 @@ std::cout << DEBUG_OUTPUT(json["Non-existent node"]["a child"]->is_defined()); /
 ```cpp
 //.cpp
 // Makes array from values
-json json = js_array{1, 2, 3, "a", true, false, 4.5, nullptr};
+njs3::json json = njs3::js_array{1, 2, 3, "a", true, false, 4.5, nullptr};
 if (auto a = json->as_array()) // gets js_array interface (is simply std::vector<json>
 {
     a->push_back(123);
     a->push_back("abc");
 }
-std::cout << json_out_pretty << json << std::endl;
+std::cout << njs3::json_out_pretty << json << std::endl;
 ```
 
 ```cpp
 //.cpp
-json json = js_object{
+njs3::json json = njs3::js_object{
     {"a", 1},
     {"b", 2},
-    {"c", js_array{"X", "Y", "Z", 1, 2, 3}},
+    {"c", njs3::js_array{"X", "Y", "Z", 1, 2, 3}},
 };
 if (auto a = json->as_object()) // gets js_object interface (is simply std::map<js_string, json>)
 {
     a->insert_or_assign("d", 12345);
     a->insert_or_assign("e", "abc");
-    a->insert_or_assign("f", js_object{{"f1", 123}, {"f2", 456}, {"f3", 789},});
+    a->insert_or_assign("f", njs3::js_object{{"f1", 123}, {"f2", 456}, {"f3", 789},});
 }
-std::cout << json_out_pretty << json << std::endl;
+std::cout << njs3::json_out_pretty << json << std::endl;
 ```
 
 ### 🌟 Making JSON Values From STL Containers
@@ -304,13 +303,13 @@ std::cout << json_out_pretty << json << std::endl;
 //.cpp
 {
     // Makes array of array from STL containers
-    json json = std::vector<std::vector<float>>
+    njs3::json json = std::vector<std::vector<float>>
     {
         {1, 2, 3},
         {4, 5, 6},
         {7, 8, 9}
     };
-    std::cout << json_out_pretty << json << std::endl;
+    std::cout << njs3::json_out_pretty << json << std::endl;
 
     // `get_*` method assumes type is array. if not, throws bad_access
     for (auto&& row : json->get_array())
@@ -324,8 +323,8 @@ std::cout << json_out_pretty << json << std::endl;
 
 {
     // std::map<string, ...> is converted json::js_object
-    json json = std::map<std::string, int>{{"a", 1}, {"b", 2}};
-    std::cout << json_out_pretty << json << std::endl;
+    njs3::json json = std::map<std::string, int>{{"a", 1}, {"b", 2}};
+    std::cout << njs3::json_out_pretty << json << std::endl;
     // makes { "a": 1, "b": 2 }
 }
 ```
@@ -346,7 +345,7 @@ std::cout << json_out_pretty << json << std::endl;
         // returns json-formated string (or simply `nanojson3::json`)
         [[nodiscard]] std::string to_json() const
         {
-            return json(js_object{
+            return njs3::json(njs3::js_object{
                 {"title", title},
                 {"value", value},
             }).serialize();
@@ -360,11 +359,11 @@ std::cout << json_out_pretty << json << std::endl;
     //    - string to_json(s); 
     //    - json to_json(s);
 
-    json test = custom_struct{"the answer", 42};
+    njs3::json test = custom_struct{"the answer", 42};
     std::cout << DEBUG_OUTPUT(test);
 
     // Mix use with json_convertible objects.
-    json json = std::array<custom_struct, 2>{
+    njs3::json json = std::array<custom_struct, 2>{
         {
             {"the answer", 42},
             {"the answer squared", 42 * 42},
@@ -384,11 +383,11 @@ std::cout << json_out_pretty << json << std::endl;
     //      {"title": "the answer is", "value": 44},
     //      {"title": "the answer is", "value": 45}
     //  ]
-    std::cout << json_out_pretty << DEBUG_OUTPUT(json);
+    std::cout << njs3::json_out_pretty << DEBUG_OUTPUT(json);
 
     // tuple is converted into array
-    json json2 = std::tuple<int, double, custom_struct>{42, 42.195, {"hello", 12345}};
-    std::cout << json_out_pretty << DEBUG_OUTPUT(json2);
+    njs3::json json2 = std::tuple<int, double, custom_struct>{42, 42.195, {"hello", 12345}};
+    std::cout << njs3::json_out_pretty << DEBUG_OUTPUT(json2);
     // makes
     // [
     //    42,
@@ -452,7 +451,7 @@ Let `json_serializer<Vector3f>` as
 
 // Vector3f JSON serializer
 template <>
-struct nanojson3::json_serializer<foobar_library::Vector3f>
+struct njs3::json_serializer<foobar_library::Vector3f>
 {
     static json serialize(const foobar_library::Vector3f& val)
     {
@@ -474,10 +473,10 @@ struct nanojson3::json_serializer<foobar_library::Vector3f>
 
 namespace foobar_library
 {
-    static nanojson3::json to_json(const foobar_library::Matrix3x3f& val)
+    static njs3::json to_json(const Matrix3x3f& val)
     {
         // std::array<Vector3f, N> will be converted to `json` via another `json_serializer`.
-        return std::array<foobar_library::Vector3f, 3>{val.row0, val.row1, val.row2};
+        return std::array<Vector3f, 3>{val.row0, val.row1, val.row2};
     }
 }
 ```
@@ -487,19 +486,17 @@ namespace foobar_library
 ```cpp
 //.cpp
 
-
 void fixed_user_defined_types()
 {
-    using namespace njs3;
     const foobar_library::Vector3f input = {1.0f, 2.0f, 3.0f};
 
     // Convert Vector3f into json by `json_serializer<Vector3f>`
-    json json_from_vector3f = input;
+    njs3::json json_from_vector3f = input;
     std::cout << std::fixed << DEBUG_OUTPUT(json_from_vector3f);
     // makes output like {"x":1.0000,"y":2.0000,"z":3.0000}.
 
     // Convert Matrix3x3f into json by `foobar_library::to_json`
-    json json_from_matrix3x3f = std::vector<foobar_library::Matrix3x3f>{
+    njs3::json json_from_matrix3x3f = std::vector<foobar_library::Matrix3x3f>{
         {
             {1.0f, 2.0f, 3.0f},
             {4.0f, 5.0f, 6.0f},
@@ -513,8 +510,8 @@ void fixed_user_defined_types()
     };
 
     // Output float format can be set by i/o manipulators.
-    std::cout << std::fixed << std::setprecision(3) << json_out_pretty << DEBUG_OUTPUT(json_from_matrix3x3f);
-    std::cout << std::scientific << std::setprecision(16) << json_out_pretty << DEBUG_OUTPUT(json_from_matrix3x3f);
+    std::cout << std::fixed << std::setprecision(3) << njs3::json_out_pretty << DEBUG_OUTPUT(json_from_matrix3x3f);
+    std::cout << std::scientific << std::setprecision(16) << njs3::json_out_pretty << DEBUG_OUTPUT(json_from_matrix3x3f);
 }
 ```
 
