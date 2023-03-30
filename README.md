@@ -16,6 +16,8 @@ The previous version is in `v1` or `v2` branch.
 This library provides simply a json implementation type `json` such as
 
 ```cpp
+// psudo-code
+
 class json
 {
     using js_undefined = ...;
@@ -47,7 +49,7 @@ class json
     // and some useful helper objects/functions.
     class json_reader; // parse from string or istream.
     class json_writer; // write  to  string or ostream.
-    json(...);       // many importing constructor overloads.
+    json(...);         // constructor overloads for vary types.
 };
 ```
 ## 🌟 Sample Code Snippets
@@ -81,8 +83,6 @@ std::cout << json_out_pretty << json; // output pretty
 
 👇 input (parse with some flags)
 
-
-
 ```js
 auto src = R""(
 
@@ -114,7 +114,7 @@ std::cout << json_out_pretty << json_reader::parse_json(
     | json_parse_option::allow_comment             // allows block/line comments
     | json_parse_option::allow_trailing_comma      // allows comma following last element
     | json_parse_option::allow_unquoted_object_key // allows naked object key
-    // or simply `json_reader::loose_option::all` enables all loose option flags.
+    // or simply `json_parse_option::all` enables all loose option flags.
 );
 ```
 
@@ -148,8 +148,8 @@ json json = json_reader::parse_json(R""(
     "bool_true" : true,
     "bool_false" : false,
     "integer" : 1234567890123456789, // parsed to js_integer 1234567890123456789
-    "float1" : 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890, // parsed to float_t 1.234568e+119
-    "float2" : 1.234567e+89, // parsed to float_t 1.234567e+89,
+    "float1" : 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890, // parsed to js_floating 1.234568e+119
+    "float2" : 1.234567e+89, // parsed to js_floating 1.234567e+89,
     "strings" : {
         "a": "a",
         "にほんご": "\/\/あいう\n\tえお",
@@ -192,9 +192,8 @@ std::cout << json_out_pretty << json;
   ]
 }
 ```
-Note
-- json object is implemented by `std::map<js_string, json>` internally, so its properties are sorted by key.
-- Numbers into `js_integer (long long)` or `float_t (long double)` type by value.
+※ Note: Numbers are parsed into integer or floating-point types,
+         the type is determined by their value range and representation.
 
 👇 And that `json` object can be accessed by `operator[]` and `operator->` ...
 
@@ -344,7 +343,7 @@ std::cout << json_out_pretty << json << std::endl;
         std::string title{};
         int value{};
 
-        // returns json string (or json)
+        // returns json-formated string (or simply `nanojson3::json`)
         [[nodiscard]] std::string to_json() const
         {
             using namespace nanojson3;
@@ -521,35 +520,26 @@ void fixed_user_defined_types()
 ```
 
 
-### 🌟 Built-in constructor extensions
+### 🌟 Built-in Json serializer extensions
 
 The nanojson provides some built-in specializations and helper classes (in `nanojson3.h`).
 
 The importing functions for STL objects described above are implemented as constructor extensions.
 
-- built-in ext ctor for primitives.
-  - prevent `bool` constructor by pointer types (`std::is_pointer<T>`)
-  - map all integral types (`char`, `int`, `unsigned long`, ...) to `int_t` (`std::is_integral<T>`)
-  - map all floating point types (`float`, `double`, ...) to `float_t` (`std::is_floating_point<T>`)
-  - map `const char*` to `js_string`
-  - map `std::string_view` to `js_string`
-- built-in ext ctor for js_array: map some STL container`<T>` to `js_array`, if `T` is convertible json.
-  - map `std::initializer_list<T>` to `js_array`
-  - map `std::vector<T>` to `js_array`
-  - map `std::array<T, n>` to `js_array`
-  - map `std::set<T>` to `js_array`
-  - map `std::multiset<T>` to `js_array`
-  - map `std::unordered_set<T>` to `js_array`
-  - map `std::unordered_multiset<T>` to `js_array`
-  - map `std::tuple<T...>` to `js_array`
-- built-in ext ctor for js_object: map some STL container`<K, T>` to `js_object`, if `K` is convertible string and `T` is convertible json.
-  - map `std::map<K, T>` to `js_object`
-  - map `std::unordered_map<K, T>` to `js_object`
-- built-in ext ctor for to_json types: some types which has `to_json()` function to `json`
-  - enable_if `T` has `string T::to_json() const;`
-  - enable_if `T` has `nanojson3::json T::to_json() const;`
-  - enable_if `T` does not have `T::to_json() const;` and `string to_json(T);` is available  in global/ADL.
-  - enable_if `T` does not have `T::to_json() const;` and `nanojson3::json to_json(T);` is available in global/ADL.
+  - built-in `json_serializer` for primitives:
+    - map all integral types (except `char`) to `js_integer`
+    - map all floating-point types to `js_floating`
+    - map `const char*` to `js_string`
+    - map `container<char>` to `js_string`
+  - built-in `json_serializer` for STL containers:
+    - map `container<T>` to `js_array` if `T` is json-convertible.
+    - map `std::tuple<U...>` to `js_array` if all of `U...` is json-convertible.
+    - map `container<[K,V]>` to `js_object` if `K` is js_object_key-convertible and `V` is json-convertible.
+  - built-in `json_serializer` for User-defined types:
+    - map `T` to `json` if `T` has member function `json_string T::to_json() const`
+    - map `T` to `json` if there is ADL/global function `json_string to_json(T)`
+    - map `T` to `json` if `T` has member function `json T::to_json() const`
+    - map `T` to `json` if there is ADL/global function `json to_json(T)`
 
 ### 🌟 EOF
 

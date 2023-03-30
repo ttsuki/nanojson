@@ -72,7 +72,7 @@ void sample_code_snippets()
             | json_parse_option::allow_comment             // allows block/line comments
             | json_parse_option::allow_trailing_comma      // allows comma following last element
             | json_parse_option::allow_unquoted_object_key // allows naked object key
-            // or simply `json_reader::loose_option::all` enables all loose option flags.
+            // or simply `json_parse_option::all` enables all loose option flags.
         );
 
         //  makes 👇 output.json is
@@ -102,8 +102,8 @@ void sample_code_snippets()
     "bool_true" : true,
     "bool_false" : false,
     "integer" : 1234567890123456789, // parsed to js_integer 1234567890123456789
-    "float1" : 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890, // parsed to float_t 1.234568e+119
-    "float2" : 1.234567e+89, // parsed to float_t 1.234567e+89,
+    "float1" : 123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890, // parsed to js_floating 1.234568e+119
+    "float2" : 1.234567e+89, // parsed to js_floating 1.234567e+89,
     "strings" : {
         "a": "a",
         "にほんご": "\/\/あいう\n\tえお",
@@ -141,9 +141,8 @@ void sample_code_snippets()
         //    "this": "is ok."
         //  }
 
-        //  Note
-        //  - json object is implemented by `std::map<js_string, json_t>` internally, so its properties are sorted by key.
-        //  - Numbers into `js_integer (long long)` or `float_t (long double)` type by value.
+        // ※ Note: Numbers are parsed into integer or floating-point types,
+        //          the type is determined by their value range and representation.
 
         //  👇 And that `json` object can be accessed by `operator[]` and `operator->` ...
 
@@ -218,7 +217,7 @@ void sample_code_snippets()
     {
         // Makes array from values
         json json = js_array{1, 2, 3, "a", true, false, 4.5, nullptr};
-        if (auto a = json->as_array()) // gets js_array interface (is simply std::vector<json_t>
+        if (auto a = json->as_array()) // gets js_array interface (is simply std::vector<json>
         {
             a->push_back(123);
             a->push_back("abc");
@@ -231,7 +230,7 @@ void sample_code_snippets()
             {"b", 2},
             {"c", js_array{"X", "Y", "Z", 1, 2, 3}},
         };
-        if (auto a = json->as_object()) // gets js_object interface (is simply std::map<js_string, json_t>)
+        if (auto a = json->as_object()) // gets js_object interface (is simply std::map<js_string, json>)
         {
             a->insert_or_assign("d", 12345);
             a->insert_or_assign("e", "abc");
@@ -241,7 +240,7 @@ void sample_code_snippets()
     }
 
     //  ### 🌟 Making JSON Values From STL Containers
-    //  👇 Let's serialize STL containers into `json_t`.
+    //  👇 Let's serialize STL containers into `json`.
     {
         // Makes array of array from STL containers
         json json = std::vector<std::vector<float>>
@@ -263,14 +262,14 @@ void sample_code_snippets()
     }
 
     {
-        // std::map<string, ...> is converted json_t::js_object
         json json = std::map<std::string, int>{{"a", 1}, {"b", 2}};
         std::cout << json_out_pretty << json << std::endl;
+        // std::map<string, ...> is converted json::js_object
         // makes { "a": 1, "b": 2 }
     }
 
-    //  ### 🌟 Serializing User Defined Types Into `json_t`
-    //  👇 Let's serialize user-defined type into `json_t`.
+    //  ### 🌟 Serializing User Defined Types Into `json`
+    //  👇 Let's serialize user-defined type into `json`.
     {
         // example User defined type.
         struct custom_struct
@@ -278,7 +277,7 @@ void sample_code_snippets()
             std::string title{};
             int value{};
 
-            // returns json string (or json_t)
+            // returns json-formatted string (or simply nanojson3::json)
             [[nodiscard]] std::string to_json() const
             {
                 using namespace nanojson3;
@@ -291,10 +290,10 @@ void sample_code_snippets()
 
         //  Converts from user-defined struct by member function such 
         //    - string to_json() const;
-        //    - json_t to_json() const;
+        //    - json to_json() const;
         //  or non-member functions searched global/ADL such 
         //    - string to_json(s); 
-        //    - json_t to_json(s);
+        //    - json to_json(s);
 
         json test = custom_struct{"the answer", 42};
         std::cout << DEBUG_OUTPUT(test);
@@ -306,9 +305,9 @@ void sample_code_snippets()
                 {"the answer squared", 42 * 42},
             }
         };
-        // std::array of json convertible type is converted into json_t::js_array
+        // std::array of json convertible type is converted into json::js_array
 
-        auto ref = json1->as_array(); // get js_array interface (is simply std::vector<json_t>)
+        auto ref = json1->as_array(); // get js_array interface (is simply std::vector<json>)
         ref->emplace_back(custom_struct{"the answer is", 43});
         ref->emplace_back(custom_struct{"the answer is", 44});
         ref->emplace_back(custom_struct{"the answer is", 45});
