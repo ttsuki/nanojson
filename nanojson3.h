@@ -1367,7 +1367,7 @@ namespace nanojson3
         {
             auto [ptr, ec] = std::to_chars(std::begin(buffer), std::end(buffer), i, 10);
             if (ec != std::errc{}) throw bad_value("failed to to_chars(integer)");
-            return std::string_view(buffer, ptr - buffer);
+            return std::string_view(buffer, static_cast<size_t>(ptr - buffer));
         }
 
         // element
@@ -1577,7 +1577,7 @@ namespace nanojson3
         static inline DestinationContainer serialize_json(const json& value, json_serialize_option option = json_serialize_option::none, json_floating_format_options floating_format = {})
         {
             DestinationContainer string;
-            io::serialize_json<std::back_insert_iterator<DestinationContainer>>(std::back_insert_iterator(string), value, option, floating_format);
+            io::serialize_json<std::back_insert_iterator<DestinationContainer>>(std::back_inserter(string), value, option, floating_format);
             return string;
         }
     }
@@ -1606,6 +1606,8 @@ namespace nanojson3
                 return (void)manipulator(ostream), ostream;
             }
         };
+
+        template <class F> stream_manipulator(F&&) -> stream_manipulator<F>; // CTAD guide
 
         // allocates json parse option word index
         [[nodiscard]] inline int json_istream_parse_option_index()
