@@ -408,8 +408,11 @@ namespace nanojson3
         using json_string = std::basic_string<char_type, char_traits, allocator_type_for<char_type>>;
         using json_string_view = std::basic_string_view<char_type, char_traits>;
 
+    private: // holds a json element value
+        js_variant value_{};
+
     public: // constructors
-        json() { }
+        json() = default;
         json(const json& other) = default;
         json(json&& other) noexcept = default;
         json& operator=(const json& other) = default;
@@ -456,31 +459,15 @@ namespace nanojson3
         [[nodiscard]] static json parse(const json_string_view& source, json_parse_option opt = json_parse_option::default_option);
         [[nodiscard]] json_string serialize(json_serialize_option opt = json_serialize_option::none, json_floating_format_options format = json_floating_format_options{}) const;
 
-    public:
-        /// json_value: holds a json element value
-        class json_value final
+    public: // value access operators
+        template <class js_variant_ref, std::enable_if_t<std::is_same_v<js_variant_ref, js_variant&> || std::is_same_v<js_variant_ref, const js_variant&>> * = nullptr>
+        class json_value_reference_container
         {
-            js_variant value_{};
-
-        private:
-            friend class json;
-
-            json_value() = default;
-            json_value(const json_value& other) = default;
-            json_value(json_value&& other) noexcept = default;
-
-            template <json_type_index type_index, class... Args>
-            json_value(in_place_index_t<type_index> index, Args&&... args)
-                : value_(index, std::forward<Args>(args)...) { }
-
-            json_value& operator=(const json_value& other) = default;
-            json_value& operator=(json_value&& other) noexcept = default;
-
-            ~json_value() = default;
+            js_variant_ref& value_;
 
         public:
-            bool operator ==(const json_value& rhs) const noexcept { return value_ == rhs.value_; }
-            bool operator !=(const json_value& rhs) const noexcept { return value_ != rhs.value_; }
+            json_value_reference_container(js_variant_ref& ref) : value_(ref) {}
+            const json_value_reference_container* operator ->() const noexcept { return this; }
 
             [[nodiscard]] json_type_index get_type() const noexcept { return static_cast<json_type_index>(value_.index()); }
             [[nodiscard]] const js_variant& as_variant() const noexcept { return value_; }
@@ -497,24 +484,14 @@ namespace nanojson3
             [[nodiscard]] bool is_object() const noexcept { return is<js_object>(); }
 
             // returns nullptr if type is mismatch
-            template <class T> [[nodiscard]] const T* as() const noexcept { return std::get_if<T>(&value_); }
-            [[nodiscard]] const js_null* as_null() const noexcept { return as<js_null>(); }
-            [[nodiscard]] const js_boolean* as_bool() const noexcept { return as<js_boolean>(); }
-            [[nodiscard]] const js_integer* as_integer() const noexcept { return as<js_integer>(); }
-            [[nodiscard]] const js_floating* as_floating() const noexcept { return as<js_floating>(); }
-            [[nodiscard]] const js_string* as_string() const noexcept { return as<js_string>(); }
-            [[nodiscard]] const js_array* as_array() const noexcept { return as<js_array>(); }
-            [[nodiscard]] const js_object* as_object() const noexcept { return as<js_object>(); }
-
-            // returns nullptr if type is mismatch
-            template <class T> [[nodiscard]] T* as() noexcept { return std::get_if<T>(&value_); }
-            [[nodiscard]] js_null* as_null() noexcept { return as<js_null>(); }
-            [[nodiscard]] js_boolean* as_bool() noexcept { return as<js_boolean>(); }
-            [[nodiscard]] js_integer* as_integer() noexcept { return as<js_integer>(); }
-            [[nodiscard]] js_floating* as_floating() noexcept { return as<js_floating>(); }
-            [[nodiscard]] js_string* as_string() noexcept { return as<js_string>(); }
-            [[nodiscard]] js_array* as_array() noexcept { return as<js_array>(); }
-            [[nodiscard]] js_object* as_object() noexcept { return as<js_object>(); }
+            template <class T> [[nodiscard]] auto* as() const noexcept { return std::get_if<T>(&value_); }
+            [[nodiscard]] auto* as_null() const noexcept { return as<js_null>(); }
+            [[nodiscard]] auto* as_bool() const noexcept { return as<js_boolean>(); }
+            [[nodiscard]] auto* as_integer() const noexcept { return as<js_integer>(); }
+            [[nodiscard]] auto* as_floating() const noexcept { return as<js_floating>(); }
+            [[nodiscard]] auto* as_string() const noexcept { return as<js_string>(); }
+            [[nodiscard]] auto* as_array() const noexcept { return as<js_array>(); }
+            [[nodiscard]] auto* as_object() const noexcept { return as<js_object>(); }
 
             // throws bad_access if type is mismatch
             template <class T> [[nodiscard]] T get() const { return as<T>() ? *as<T>() : throw bad_access(); }
@@ -569,145 +546,150 @@ namespace nanojson3
             }
         };
 
-    private:
-        json_value value_{};
+        using const_json_value_ref = json_value_reference_container<const js_variant&>;
+        using json_value_ref = json_value_reference_container<js_variant&>;
 
-    public: // value access operators
-        [[nodiscard]] const json_value& value() const noexcept { return value_; }
-        [[nodiscard]] const json_value& operator *() const noexcept { return value(); }
-        [[nodiscard]] const json_value* operator ->() const noexcept { return &value(); }
-        [[nodiscard]] json_value& value() noexcept { return value_; }
-        [[nodiscard]] json_value& operator *() noexcept { return value(); }
-        [[nodiscard]] json_value* operator ->() noexcept { return &value(); }
+        [[nodiscard]] const_json_value_ref value() const noexcept { return const_json_value_ref{value_}; }
+        [[nodiscard]] const_json_value_ref operator *() const noexcept { return value(); }
+        [[nodiscard]] const_json_value_ref operator ->() const noexcept { return value(); }
+
+        [[nodiscard]] json_value_ref value() noexcept { return json_value_ref{value_}; }
+        [[nodiscard]] json_value_ref operator *() noexcept { return value(); }
+        [[nodiscard]] json_value_ref operator ->() noexcept { return value(); }
 
     public: // array/object index operators
         using const_node_reference = const json&;
-        struct node_reference;
+        class node_reference;
 
-        // undefined_reference
+        [[nodiscard]] const_node_reference operator[](js_array_index_view index) const noexcept;
+        [[nodiscard]] const_node_reference operator[](js_object_key_view key) const noexcept;
+        [[nodiscard]] node_reference operator[](js_array_index_view index) noexcept;
+        [[nodiscard]] node_reference operator[](js_object_key_view key) noexcept;
+
+    public: // undefined_reference
         [[nodiscard]] static const json& undefined_reference() noexcept
         {
             static json undefined{js_undefined{}};
             return undefined;
         }
-
-        const_node_reference operator[](js_array_index key) const noexcept
-        {
-            if (const auto a = value().as_array())
-                if (key < a->size())
-                    return a->operator[](key);
-
-            return undefined_reference();
-        }
-
-        const_node_reference operator[](js_object_key_view key) const noexcept
-        {
-            if (const auto o = value().as_object())
-                if (const auto it = o->find(key); it != o->end())
-                    return it->second;
-
-            return undefined_reference();
-        }
-
-        class node_reference final
-        {
-        private:
-            using undefined_pointer = std::monostate;
-            using normal_pointer = json*;
-            using array_write_pointer = std::pair<js_array*, js_array::size_type>;
-            using object_write_pointer = std::pair<js_object*, js_object::key_type>;
-            using pointer = std::variant<undefined_pointer, normal_pointer, array_write_pointer, object_write_pointer>;
-            pointer pointer_{};
-            node_reference(pointer p) : pointer_(std::move(p)) { }
-
-        public:
-            node_reference(json& r) : pointer_(std::in_place_type<normal_pointer>, &r) { }
-            node_reference(const node_reference& other) = delete;
-            node_reference(node_reference&& other) noexcept = delete;
-            node_reference& operator=(const node_reference& other) = delete;
-            node_reference& operator=(node_reference&& other) noexcept = delete;
-            ~node_reference() = default;
-
-            [[nodiscard]] json_value& value() const noexcept
-            {
-                if (const normal_pointer* p = std::get_if<normal_pointer>(&pointer_)) return (*p)->value();
-                return const_cast<json_value&>(undefined_reference().value()); // assumes the value type can't be changed from json_value_t interface.
-            }
-
-            [[nodiscard]] json_value& operator *() const noexcept { return value(); }
-            [[nodiscard]] json_value* operator ->() const noexcept { return &value(); }
-
-            [[nodiscard]] node_reference operator [](js_array_index key) const noexcept
-            {
-                if (const normal_pointer* p = std::get_if<normal_pointer>(&pointer_))
-                {
-                    if (const auto a = (*p)->value().as_array())
-                    {
-                        if (key < a->size())
-                            return pointer(std::in_place_type<normal_pointer>, &a->operator[](key)); // normal reference
-                        else
-                            return pointer(std::in_place_type<array_write_pointer>, a, key); // write only reference
-                    }
-                }
-
-                return pointer{undefined_pointer{}};
-            }
-
-            [[nodiscard]] node_reference operator [](js_object_key_view key) const noexcept
-            {
-                if (const normal_pointer* p = std::get_if<normal_pointer>(&pointer_))
-                {
-                    if (const auto o = (*p)->value().as_object())
-                    {
-                        if (const auto it = o->find(key); it != o->end())
-                            return pointer(std::in_place_type<normal_pointer>, &it->second); // normal reference
-                        else
-                            return pointer{std::in_place_type<object_write_pointer>, o, js_object::key_type(key)}; // write only reference
-                    }
-                }
-
-                return pointer{undefined_pointer{}};
-            }
-
-            // assign operator
-            json& operator =(json value)
-            {
-                if (normal_pointer* pn = std::get_if<normal_pointer>(&pointer_))
-                {
-                    return **pn = std::move(value);
-                }
-                else if (array_write_pointer* pa = std::get_if<array_write_pointer>(&pointer_))
-                {
-                    auto [a, i] = *pa;
-                    if (i >= a->size()) a->resize(i + 1);
-                    json& r = a->operator[](i) = std::move(value);
-                    pointer_ = normal_pointer{&r}; // update pointer to real instance
-                    return r;
-                }
-                else if (object_write_pointer* po = std::get_if<object_write_pointer>(&pointer_))
-                {
-                    auto [o, k] = *po;
-                    json& r = o->insert_or_assign(std::move(k), std::move(value)).first->second;
-                    pointer_ = normal_pointer{&r}; // update pointer to real instance
-                    return r;
-                }
-                else throw bad_access(); // can't write to undefined node
-            }
-
-            bool operator ==(const node_reference& rhs) const noexcept { return this->value() == rhs.value(); }
-            bool operator !=(const node_reference& rhs) const noexcept { return this->value() != rhs.value(); }
-            bool operator ==(const_node_reference rhs) const noexcept { return this->value() == rhs.value(); }
-            bool operator !=(const_node_reference rhs) const noexcept { return this->value() != rhs.value(); }
-        };
-
-        [[nodiscard]] node_reference operator[](js_array_index index) noexcept { return node_reference(*this)[index]; }
-        [[nodiscard]] node_reference operator[](js_object_key_view key) noexcept { return node_reference(*this)[key]; }
-
-        [[nodiscard]] bool operator ==(const node_reference& rhs) const noexcept { return this->value() == rhs.value(); }
-        [[nodiscard]] bool operator !=(const node_reference& rhs) const noexcept { return this->value() != rhs.value(); }
-        [[nodiscard]] bool operator ==(const_node_reference rhs) const noexcept { return this->value() == rhs.value(); }
-        [[nodiscard]] bool operator !=(const_node_reference rhs) const noexcept { return this->value() != rhs.value(); }
     };
+
+    class json::node_reference final
+    {
+    private:
+        using undefined_pointer = std::monostate;
+        using normal_pointer = json*;
+        using array_write_pointer = std::pair<js_array*, js_array::size_type>;
+        using object_write_pointer = std::pair<js_object*, js_object::key_type>;
+        using pointer = std::variant<undefined_pointer, normal_pointer, array_write_pointer, object_write_pointer>;
+        pointer pointer_{};
+        node_reference(pointer p) : pointer_(std::move(p)) { }
+
+    public:
+        node_reference(json& r) : pointer_(std::in_place_type<normal_pointer>, &r) { }
+        node_reference(const node_reference& other) = delete;
+        node_reference(node_reference&& other) noexcept = delete;
+        node_reference& operator=(const node_reference& other) = delete;
+        node_reference& operator=(node_reference&& other) noexcept = delete;
+        ~node_reference() = default;
+
+        [[nodiscard]] json_value_ref value() const noexcept
+        {
+            if (const normal_pointer* p = std::get_if<normal_pointer>(&pointer_)) return (*p)->value();
+            return const_cast<json&>(undefined_reference()).value(); // assumes the value type can't be changed from json_value_t interface.
+        }
+
+        [[nodiscard]] json_value_ref operator *() const noexcept { return value(); }
+        [[nodiscard]] json_value_ref operator ->() const noexcept { return value(); }
+
+        [[nodiscard]] node_reference operator [](js_array_index key) const noexcept
+        {
+            if (const normal_pointer* p = std::get_if<normal_pointer>(&pointer_))
+            {
+                if (const auto a = (*p)->value().as_array())
+                {
+                    if (key < a->size())
+                        return pointer(std::in_place_type<normal_pointer>, &a->operator[](key)); // normal reference
+                    else
+                        return pointer(std::in_place_type<array_write_pointer>, a, key); // write only reference
+                }
+            }
+
+            return pointer{undefined_pointer{}};
+        }
+
+        [[nodiscard]] node_reference operator [](js_object_key_view key) const noexcept
+        {
+            if (const normal_pointer* p = std::get_if<normal_pointer>(&pointer_))
+            {
+                if (const auto o = (*p)->value().as_object())
+                {
+                    if (const auto it = o->find(key); it != o->end())
+                        return pointer(std::in_place_type<normal_pointer>, &it->second); // normal reference
+                    else
+                        return pointer{std::in_place_type<object_write_pointer>, o, js_object::key_type(key)}; // write only reference
+                }
+            }
+
+            return pointer{undefined_pointer{}};
+        }
+
+        // assign operator
+        json& operator =(json value)
+        {
+            if (normal_pointer* pn = std::get_if<normal_pointer>(&pointer_))
+            {
+                return **pn = std::move(value);
+            }
+            else if (array_write_pointer* pa = std::get_if<array_write_pointer>(&pointer_))
+            {
+                auto [a, i] = *pa;
+                if (i >= a->size()) a->resize(i + 1);
+                json& r = a->operator[](i) = std::move(value);
+                pointer_ = normal_pointer{&r}; // update pointer to real instance
+                return r;
+            }
+            else if (object_write_pointer* po = std::get_if<object_write_pointer>(&pointer_))
+            {
+                auto [o, k] = *po;
+                json& r = o->insert_or_assign(std::move(k), std::move(value)).first->second;
+                pointer_ = normal_pointer{&r}; // update pointer to real instance
+                return r;
+            }
+            else throw bad_access(); // can't write to undefined node
+        }
+    };
+
+    inline json::const_node_reference json::operator[](js_array_index_view index) const noexcept
+    {
+        if (const auto a = value().as_array())
+            if (index < a->size())
+                return a->operator[](index);
+
+        return undefined_reference();
+    }
+
+    inline json::const_node_reference json::operator[](js_object_key_view key) const noexcept
+    {
+        if (const auto o = value().as_object())
+            if (const auto it = o->find(key); it != o->end())
+                return it->second;
+
+        return undefined_reference();
+    }
+
+    inline json::node_reference json::operator[](js_array_index_view index) noexcept { return node_reference(*this)[index]; }
+    inline json::node_reference json::operator[](js_object_key_view key) noexcept { return node_reference(*this)[key]; }
+
+    [[nodiscard]] inline bool operator ==(const json& lhs, const json& rhs) noexcept { return lhs->as_variant() == rhs->as_variant(); }
+    [[nodiscard]] inline bool operator !=(const json& lhs, const json& rhs) noexcept { return lhs->as_variant() != rhs->as_variant(); }
+    [[nodiscard]] inline bool operator ==(const json& lhs, const json::node_reference& rhs) noexcept { return lhs->as_variant() == rhs->as_variant(); }
+    [[nodiscard]] inline bool operator !=(const json& lhs, const json::node_reference& rhs) noexcept { return lhs->as_variant() != rhs->as_variant(); }
+    [[nodiscard]] inline bool operator ==(const json::node_reference& lhs, const json& rhs) noexcept { return lhs->as_variant() == rhs->as_variant(); }
+    [[nodiscard]] inline bool operator !=(const json::node_reference& lhs, const json& rhs) noexcept { return lhs->as_variant() != rhs->as_variant(); }
+    [[nodiscard]] inline bool operator ==(const json::node_reference& lhs, const json::node_reference& rhs) noexcept { return lhs->as_variant() == rhs->as_variant(); }
+    [[nodiscard]] inline bool operator !=(const json::node_reference& lhs, const json::node_reference& rhs) noexcept { return lhs->as_variant() != rhs->as_variant(); }
+
 
     template <class CharInputIterator>
     struct json::json_reader
