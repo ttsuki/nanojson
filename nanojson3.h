@@ -381,9 +381,7 @@ namespace nanojson3
     /// json: represents a json element
     class json final
     {
-    public:
-        // types
-
+    public: // typedefs
         using char_type = char;
         using char_traits = std::char_traits<char_type>;
         using allocator_type = std::allocator<char_type>;
@@ -405,11 +403,58 @@ namespace nanojson3
         using js_object_key_view = js_string_view;
         using js_object_kvp = containers::key_value_pair<js_object_key, json>;
         using js_object = containers::linear_map<js_object_key, json, std::equal_to<>, std::vector<js_object_kvp, allocator_type_for<js_object_kvp>>>;
-
         using js_variant = std::variant<js_undefined, js_null, js_boolean, js_integer, js_floating, js_string, js_array, js_object>;
 
         using json_string = std::basic_string<char_type, char_traits, allocator_type_for<char_type>>;
         using json_string_view = std::basic_string_view<char_type, char_traits>;
+
+    public: // constructors
+        json() { }
+        json(const json& other) = default;
+        json(json&& other) noexcept = default;
+        json& operator=(const json& other) = default;
+        json& operator=(json&& other) noexcept = default;
+
+        template <json_type_index type_index, class... Args>
+        json(in_place_index_t<type_index> index, Args&&... args) : value_(index, std::forward<Args>(args)...) { }
+
+        json(const js_undefined& value) : json(in_place_index::undefined, std::forward<decltype(value)>(value)) { }
+        json(const js_null& value) : json(in_place_index::null, std::forward<decltype(value)>(value)) { }
+        json(const js_boolean& value) : json(in_place_index::boolean, std::forward<decltype(value)>(value)) { }
+        json(const js_integer& value) : json(in_place_index::integer, std::forward<decltype(value)>(value)) { }
+        json(const js_floating& value) : json(in_place_index::floating, std::forward<decltype(value)>(value)) { }
+        json(const js_string& value) : json(in_place_index::string, std::forward<decltype(value)>(value)) { }
+        json(const js_array& value) : json(in_place_index::array, std::forward<decltype(value)>(value)) { }
+        json(const js_object& value) : json(in_place_index::object, std::forward<decltype(value)>(value)) { }
+
+        json(js_undefined&& value) : json(in_place_index::undefined, std::forward<decltype(value)>(value)) { }
+        json(js_null&& value) : json(in_place_index::null, std::forward<decltype(value)>(value)) { }
+        json(js_boolean&& value) : json(in_place_index::boolean, std::forward<decltype(value)>(value)) { }
+        json(js_integer&& value) : json(in_place_index::integer, std::forward<decltype(value)>(value)) { }
+        json(js_floating&& value) : json(in_place_index::floating, std::forward<decltype(value)>(value)) { }
+        json(js_string&& value) : json(in_place_index::string, std::forward<decltype(value)>(value)) { }
+        json(js_array&& value) : json(in_place_index::array, std::forward<decltype(value)>(value)) { }
+        json(js_object&& value) : json(in_place_index::object, std::forward<decltype(value)>(value)) { }
+
+        // serialize construct
+        template <class T, std::enable_if_t<std::is_same_v<decltype(json_serializer<std::decay_t<T>>::serialize(std::declval<T>())), json>>* = nullptr>
+        json(T&& value) : json(json_serializer<std::decay_t<T>>::serialize(std::forward<T>(value))) { }
+
+        // serialize construct (initializer-list)
+        template <class E, std::enable_if_t<std::is_same_v<decltype(json_serializer<std::initializer_list<E>>::serialize(std::declval<std::initializer_list<E>>())), json>>* = nullptr>
+        json(std::initializer_list<E>&& value) : json(json_serializer<std::decay_t<std::initializer_list<E>>>::serialize(std::forward<std::initializer_list<E>>(value))) { }
+
+        // prevent unintended implicit conversion
+        template <class T, std::enable_if_t<!std::is_same_v<decltype(json_serializer<std::decay_t<T>>::serialize(std::declval<T>())), json>>* = nullptr>
+        json(T) = delete;
+
+        ~json() = default;
+
+    public: // i/o
+        template <class CharInputIterator> struct json_reader;
+        template <class CharOutputIterator> struct json_writer;
+        [[nodiscard]] static json parse(const json_string_view& source, json_parse_option opt = json_parse_option::default_option);
+        [[nodiscard]] json_string serialize(json_serialize_option opt = json_serialize_option::none, json_floating_format_options format = json_floating_format_options{}) const;
 
     public:
         /// json_value: holds a json element value
@@ -527,47 +572,7 @@ namespace nanojson3
     private:
         json_value value_{};
 
-    public:
-        // constructors
-        json() { }
-        json(const json& other) = default;
-        json(json&& other) noexcept = default;
-        json& operator=(const json& other) = default;
-        json& operator=(json&& other) noexcept = default;
-
-        template <json_type_index type_index, class... Args>
-        json(in_place_index_t<type_index> index, Args&&... args) : value_(index, std::forward<Args>(args)...) { }
-
-        json(const js_undefined& value) : json(in_place_index::undefined, std::forward<decltype(value)>(value)) { }
-        json(const js_null& value) : json(in_place_index::null, std::forward<decltype(value)>(value)) { }
-        json(const js_boolean& value) : json(in_place_index::boolean, std::forward<decltype(value)>(value)) { }
-        json(const js_integer& value) : json(in_place_index::integer, std::forward<decltype(value)>(value)) { }
-        json(const js_floating& value) : json(in_place_index::floating, std::forward<decltype(value)>(value)) { }
-        json(const js_string& value) : json(in_place_index::string, std::forward<decltype(value)>(value)) { }
-        json(const js_array& value) : json(in_place_index::array, std::forward<decltype(value)>(value)) { }
-        json(const js_object& value) : json(in_place_index::object, std::forward<decltype(value)>(value)) { }
-
-        json(js_undefined&& value) : json(in_place_index::undefined, std::forward<decltype(value)>(value)) { }
-        json(js_null&& value) : json(in_place_index::null, std::forward<decltype(value)>(value)) { }
-        json(js_boolean&& value) : json(in_place_index::boolean, std::forward<decltype(value)>(value)) { }
-        json(js_integer&& value) : json(in_place_index::integer, std::forward<decltype(value)>(value)) { }
-        json(js_floating&& value) : json(in_place_index::floating, std::forward<decltype(value)>(value)) { }
-        json(js_string&& value) : json(in_place_index::string, std::forward<decltype(value)>(value)) { }
-        json(js_array&& value) : json(in_place_index::array, std::forward<decltype(value)>(value)) { }
-        json(js_object&& value) : json(in_place_index::object, std::forward<decltype(value)>(value)) { }
-
-        ~json() = default;
-
-    public:
-        // undefined_reference
-        [[nodiscard]] static const json& undefined_reference() noexcept
-        {
-            static json undefined{js_undefined{}};
-            return undefined;
-        }
-
-    public:
-        // value access operators
+    public: // value access operators
         [[nodiscard]] const json_value& value() const noexcept { return value_; }
         [[nodiscard]] const json_value& operator *() const noexcept { return value(); }
         [[nodiscard]] const json_value* operator ->() const noexcept { return &value(); }
@@ -575,10 +580,16 @@ namespace nanojson3
         [[nodiscard]] json_value& operator *() noexcept { return value(); }
         [[nodiscard]] json_value* operator ->() noexcept { return &value(); }
 
-        // array/object index operators
-
+    public: // array/object index operators
         using const_node_reference = const json&;
         struct node_reference;
+
+        // undefined_reference
+        [[nodiscard]] static const json& undefined_reference() noexcept
+        {
+            static json undefined{js_undefined{}};
+            return undefined;
+        }
 
         const_node_reference operator[](js_array_index key) const noexcept
         {
@@ -598,15 +609,18 @@ namespace nanojson3
             return undefined_reference();
         }
 
-        struct node_reference final
+        class node_reference final
         {
+        private:
             using undefined_pointer = std::monostate;
             using normal_pointer = json*;
             using array_write_pointer = std::pair<js_array*, js_array::size_type>;
             using object_write_pointer = std::pair<js_object*, js_object::key_type>;
             using pointer = std::variant<undefined_pointer, normal_pointer, array_write_pointer, object_write_pointer>;
-
+            pointer pointer_{};
             node_reference(pointer p) : pointer_(std::move(p)) { }
+
+        public:
             node_reference(json& r) : pointer_(std::in_place_type<normal_pointer>, &r) { }
             node_reference(const node_reference& other) = delete;
             node_reference(node_reference&& other) noexcept = delete;
@@ -684,9 +698,6 @@ namespace nanojson3
             bool operator !=(const node_reference& rhs) const noexcept { return this->value() != rhs.value(); }
             bool operator ==(const_node_reference rhs) const noexcept { return this->value() == rhs.value(); }
             bool operator !=(const_node_reference rhs) const noexcept { return this->value() != rhs.value(); }
-
-        private:
-            pointer pointer_{};
         };
 
         [[nodiscard]] node_reference operator[](js_array_index index) noexcept { return node_reference(*this)[index]; }
@@ -696,25 +707,6 @@ namespace nanojson3
         [[nodiscard]] bool operator !=(const node_reference& rhs) const noexcept { return this->value() != rhs.value(); }
         [[nodiscard]] bool operator ==(const_node_reference rhs) const noexcept { return this->value() == rhs.value(); }
         [[nodiscard]] bool operator !=(const_node_reference rhs) const noexcept { return this->value() != rhs.value(); }
-
-    public:
-        // i/o
-        template <class CharInputIterator> struct json_reader;
-        template <class CharOutputIterator> struct json_writer;
-
-        [[nodiscard]] static json parse(const json_string_view& source, json_parse_option opt = json_parse_option::default_option);
-        [[nodiscard]] json_string serialize(json_serialize_option opt = json_serialize_option::none, json_floating_format_options format = json_floating_format_options{}) const;
-
-    public:
-        template <class T, std::enable_if_t<!std::is_same_v<decltype(json_serializer<std::decay_t<T>>::serialize(std::declval<T>())), json>>* = nullptr>
-        json(T) = delete; // prevent implicit conversion
-
-        // serialize construct
-        template <class T, std::enable_if_t<std::is_same_v<decltype(json_serializer<std::decay_t<T>>::serialize(std::declval<T>())), json>>* = nullptr>
-        json(T&& value) : json(json_serializer<std::decay_t<T>>::serialize(std::forward<T>(value))) { }
-
-        template <class E, std::enable_if_t<std::is_same_v<decltype(json_serializer<std::initializer_list<E>>::serialize(std::declval<std::initializer_list<E>>())), json>>* = nullptr>
-        json(std::initializer_list<E>&& value) : json(json_serializer<std::decay_t<std::initializer_list<E>>>::serialize(std::forward<std::initializer_list<E>>(value))) { }
     };
 
     template <class CharInputIterator>
