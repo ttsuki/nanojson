@@ -480,7 +480,7 @@ namespace nanojson3
             [[nodiscard]] bool is_defined() const noexcept { return !is<js_undefined>(); }
             [[nodiscard]] bool is_undefined() const noexcept { return is<js_undefined>(); }
             [[nodiscard]] bool is_null() const noexcept { return is<js_null>(); }
-            [[nodiscard]] bool is_bool() const noexcept { return is<js_boolean>(); }
+            [[nodiscard]] bool is_boolean() const noexcept { return is<js_boolean>(); }
             [[nodiscard]] bool is_integer() const noexcept { return is<js_integer>(); }
             [[nodiscard]] bool is_floating() const noexcept { return is<js_floating>(); }
             [[nodiscard]] bool is_string() const noexcept { return is<js_string>(); }
@@ -490,7 +490,7 @@ namespace nanojson3
             // returns nullptr if type is mismatch
             template <class T> [[nodiscard]] auto* as() const noexcept { return std::get_if<T>(&value_); }
             [[nodiscard]] auto* as_null() const noexcept { return as<js_null>(); }
-            [[nodiscard]] auto* as_bool() const noexcept { return as<js_boolean>(); }
+            [[nodiscard]] auto* as_boolean() const noexcept { return as<js_boolean>(); }
             [[nodiscard]] auto* as_integer() const noexcept { return as<js_integer>(); }
             [[nodiscard]] auto* as_floating() const noexcept { return as<js_floating>(); }
             [[nodiscard]] auto* as_string() const noexcept { return as<js_string>(); }
@@ -500,7 +500,7 @@ namespace nanojson3
             // throws bad_access if type is mismatch
             template <class T> [[nodiscard]] T get() const { return as<T>() ? *as<T>() : throw bad_access(); }
             [[nodiscard]] js_null get_null() const { return get<js_null>(); }
-            [[nodiscard]] js_boolean get_bool() const { return get<js_boolean>(); }
+            [[nodiscard]] js_boolean get_boolean() const { return get<js_boolean>(); }
             [[nodiscard]] js_integer get_integer() const { return get<js_integer>(); }
             [[nodiscard]] js_floating get_floating() const { return get<js_floating>(); }
             [[nodiscard]] js_string get_string() const { return get<js_string>(); }
@@ -510,7 +510,7 @@ namespace nanojson3
             // returns default_value if type is mismatch
             template <class T, class U, std::enable_if_t<std::is_convertible_v<U&&, T>>* = nullptr> [[nodiscard]] T get_or(U&& default_value) const noexcept { return as<T>() ? *as<T>() : static_cast<T>(std::forward<U>(default_value)); }
             [[nodiscard]] js_null get_null_or(js_null default_value) const noexcept { return get_or<js_null>(default_value); }
-            [[nodiscard]] js_boolean get_bool_or(js_boolean default_value) const noexcept { return get_or<js_boolean>(default_value); }
+            [[nodiscard]] js_boolean get_boolean_or(js_boolean default_value) const noexcept { return get_or<js_boolean>(default_value); }
             [[nodiscard]] js_integer get_integer_or(js_integer default_value) const noexcept { return get_or<js_integer>(default_value); }
             [[nodiscard]] js_floating get_floating_or(js_floating default_value) const noexcept { return get_or<js_floating>(default_value); }
             [[nodiscard]] js_string get_string_or(const js_string& default_value) const noexcept { return get_or<js_string>(default_value); }
@@ -1355,7 +1355,7 @@ namespace nanojson3
             {
             case json_type_index::undefined: return write_element(json::js_undefined{});
             case json_type_index::null: return write_element(*value.value().as_null());
-            case json_type_index::boolean: return write_element(*value.value().as_bool());
+            case json_type_index::boolean: return write_element(*value.value().as_boolean());
             case json_type_index::integer: return write_element(*value.value().as_integer());
             case json_type_index::floating: return write_element(*value.value().as_floating());
             case json_type_index::string: return write_element(*value.value().as_string());
