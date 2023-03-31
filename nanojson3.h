@@ -51,56 +51,98 @@ namespace nanojson3
     namespace containers
     {
         template <class KeyType, class ValueType>
-        using key_value_pair = std::pair<KeyType, ValueType>;
+        using key_value_pair = std::pair<const KeyType, ValueType>;
+
+        namespace type_traits
+        {
+            template <class Comparer, class = void> struct is_comparer_transparent : std::false_type {};
+
+            template <class Comparer> struct is_comparer_transparent<Comparer, std::void_t<typename Comparer::is_transparent>> : std::true_type {};
+
+            template <class Comparer> static inline constexpr bool is_comparer_transparent_v = is_comparer_transparent<Comparer>::value;
+        }
 
         // simple key-value storage
-        template <class KeyType, class ValueType, class KeyEqualityComparer = std::equal_to<KeyType>, class Allocator = std::allocator<key_value_pair<KeyType, ValueType>>>
-        class linear_kvs : std::vector<key_value_pair<KeyType, ValueType>, Allocator>
+        template <class KeyType, class ValueType, class KeyEqualityComparer = std::equal_to<KeyType>, class Container = std::vector<key_value_pair<KeyType, ValueType>>>
+        class linear_map : Container
         {
-        public:
-            using key_type = KeyType;
-            using mapped_type = ValueType;
+        public: // typedefs
+            using base_container = Container;
             using pair_type = key_value_pair<KeyType, ValueType>;
-            using key_compare = KeyEqualityComparer;
-            using allocator_type = Allocator;
-
-        private:
-            using base_container = std::vector<pair_type, allocator_type>;
-            key_compare key_equal_comparer_{};
-
-        public:
-            using value_type = typename base_container::value_type;
-            using size_type = typename base_container::size_type;
-            using difference_type = typename base_container::difference_type;
+            using key_type = KeyType;
+            using value_type = pair_type;
+            using mapped_type = ValueType;
+            using key_equality_compare = KeyEqualityComparer;
+            struct value_equality_compare;
+            using allocator_type = typename base_container::allocator_type;
             using reference = typename base_container::reference;
             using const_reference = typename base_container::const_reference;
-            using pointer = typename base_container::pointer;
-            using const_pointer = typename base_container::const_pointer;
             using iterator = typename base_container::iterator;
             using const_iterator = typename base_container::const_iterator;
+            using size_type = typename base_container::size_type;
+            using difference_type = typename base_container::difference_type;
+            using pointer = typename base_container::pointer;
+            using const_pointer = typename base_container::const_pointer;
             using reverse_iterator = typename base_container::reverse_iterator;
             using const_reverse_iterator = typename base_container::const_reverse_iterator;
 
-            linear_kvs() = default;
-            explicit linear_kvs(const key_compare& comp, const allocator_type& alloc = allocator_type{}) : base_container(alloc), key_equal_comparer_(comp) {}
-            explicit linear_kvs(const allocator_type& alloc) : base_container(alloc) {}
-            template <class InputIterator> linear_kvs(InputIterator first, InputIterator last, const key_compare& comp = key_compare{}, const allocator_type& alloc = allocator_type{}) : base_container(first, last, alloc), key_equal_comparer_(comp) {}
-            template <class InputIterator> linear_kvs(InputIterator first, InputIterator last, const allocator_type& alloc) : base_container(first, last, alloc) {}
-            linear_kvs(const linear_kvs& other) = default;
-            linear_kvs(const linear_kvs& other, const allocator_type& allocator) : base_container(other, allocator), key_equal_comparer_(other.comparer_) { }
-            linear_kvs(linear_kvs&& other) noexcept = default;
-            linear_kvs(linear_kvs&& other, const allocator_type& allocator) : base_container(std::move(other), allocator), key_equal_comparer_(other.comparer_) { }
-            linear_kvs(std::initializer_list<pair_type> init, const key_compare& comp = key_compare{}, const allocator_type& alloc = allocator_type{}) : base_container(init, alloc), key_equal_comparer_(comp) {}
-            linear_kvs(std::initializer_list<pair_type> init, const allocator_type& alloc) : base_container(init, alloc) {}
-            ~linear_kvs() = default;
+        private: // private type traits
+            template <class R, class... Predicates> using ENABLE_IF = std::enable_if_t<std::conjunction_v<Predicates...>, R>;
+            template <class Key> using key_is_comparable_with = std::bool_constant<type_traits::is_comparer_transparent_v<key_equality_compare> & std::is_invocable_r_v<bool, key_equality_compare, key_type, const Key&>>;
+            template <class... Args> using value_is_constructible_from = std::bool_constant<std::is_constructible_v<mapped_type, Args...>>;
+            template <class... Args> using pair_is_constructible_from = std::bool_constant<std::is_constructible_v<pair_type, Args...>>;
 
-            linear_kvs& operator=(const linear_kvs& other) = default;
-            linear_kvs& operator=(linear_kvs&& other) noexcept = default;
+        public: // value_equality_compare
+            struct value_equality_compare
+            {
+                KeyEqualityComparer key_equality_comparer_;
+                value_equality_compare(KeyEqualityComparer compare = {}) : key_equality_comparer_(std::move(compare)) { }
+                bool operator()(const key_type& lhs, const key_type& rhs) const { return key_equality_comparer_(lhs, rhs); }
+                bool operator()(const pair_type& lhs, const pair_type& rhs) const { return key_equality_comparer_(lhs.first, rhs.first); }
+                template <class Key> ENABLE_IF<bool, key_is_comparable_with<Key>> operator()(const key_type& lhs, const Key& rhs) const { return key_equality_comparer_(lhs, rhs); }
+                template <class Key> ENABLE_IF<bool, key_is_comparable_with<Key>> operator()(const Key& rhs, const key_type& lhs) const { return key_equality_comparer_(lhs, rhs); }
+                template <class Key> ENABLE_IF<bool, key_is_comparable_with<Key>> operator()(const pair_type& lhs, const Key& rhs) const { return key_equality_comparer_(lhs.first, rhs); }
+                template <class Key> ENABLE_IF<bool, key_is_comparable_with<Key>> operator()(const Key& rhs, const pair_type& lhs) const { return key_equality_comparer_(lhs.first, rhs); }
+            };
 
-            bool operator ==(const linear_kvs& other) const noexcept { return static_cast<const base_container&>(*this) == static_cast<const base_container&>(other); }
-            bool operator !=(const linear_kvs& other) const noexcept { return static_cast<const base_container&>(*this) != static_cast<const base_container&>(other); }
+        private:
+            value_equality_compare comparer_{};
 
         public:
+            linear_map() = default;
+            explicit linear_map(const key_equality_compare& comp, const allocator_type& alloc = allocator_type{}) : base_container(alloc), comparer_(comp) { }
+            explicit linear_map(const allocator_type& alloc) : base_container(alloc) { }
+            template <class InputIterator> linear_map(InputIterator first, InputIterator last, const key_equality_compare& comp = key_equality_compare{}, const allocator_type& alloc = allocator_type{}) : Container(alloc), comparer_(comp) { operate_insert<or_assign>(first, last); }
+            template <class InputIterator> linear_map(InputIterator first, InputIterator last, const allocator_type& alloc) : base_container(alloc) { operate_insert<or_assign>(first, last); }
+            linear_map(const linear_map& other) = default;
+            linear_map(const linear_map& other, const allocator_type& allocator) : base_container(other, allocator), comparer_(other.comparer_) { }
+            linear_map(linear_map&& other) noexcept = default;
+            linear_map(linear_map&& other, const allocator_type& allocator) : base_container(std::move(other), allocator), comparer_(other.comparer_) { }
+            linear_map(std::initializer_list<value_type> init, const key_equality_compare& comp = key_equality_compare{}, const allocator_type& alloc = allocator_type{}) : Container(alloc), comparer_(comp) { operate_insert<or_assign>(init.begin(), init.end()); }
+            linear_map(std::initializer_list<value_type> init, const allocator_type& alloc) : base_container(alloc) { operate_insert<or_assign>(init.begin(), init.end()); }
+            ~linear_map() = default;
+
+            linear_map& operator=(const linear_map& other)
+            {
+                if (this != std::addressof(other))
+                {
+                    base_container::clear();
+                    base_container::reserve(other.size());
+                    for (auto kv : other) base_container::push_back(kv);
+                }
+                return *this;
+            }
+
+            linear_map& operator=(linear_map&& other) noexcept
+            {
+                if (this != std::addressof(other))
+                {
+                    comparer_ = other.comparer_;
+                    base_container::operator=(std::move(other));
+                }
+                return *this;
+            }
+
             using base_container::get_allocator;
 
             using base_container::begin;
@@ -109,150 +151,107 @@ namespace nanojson3
             using base_container::cend;
             using base_container::rbegin;
             using base_container::rend;
+            using base_container::crbegin;
+            using base_container::crend;
 
             using base_container::empty;
             using base_container::size;
             using base_container::max_size;
-            using base_container::capacity;
             using base_container::reserve;
+            using base_container::capacity;
+            using base_container::shrink_to_fit;
 
-        private:
-            enum struct enabled { };
-
-            template <class... Predicates> using enable_if_t = std::enable_if_t<std::conjunction_v<Predicates...>, enabled>;
-
-            template <class Key> using is_key_view_type = std::bool_constant<std::is_invocable_r_v<bool, KeyEqualityComparer, const Key&, key_type>>;
-            template <class... Args> using key_is_constructible_from = std::bool_constant<std::is_constructible_v<key_type, Args...>>;
-            template <class... Args> using value_is_constructible_from = std::bool_constant<std::is_constructible_v<mapped_type, Args...>>;
-            template <class... Args> using kvp_is_constructible_from = std::bool_constant<std::is_constructible_v<value_type, Args...>>;
-
-            template <class... Args>
-            std::pair<iterator, bool> emplace_back(Args&&... args)
-            {
-                base_container::emplace_back(std::forward<Args>(args)...);
-                return std::pair<iterator, bool>{base_container::end() - 1, true};
-            }
-
-        public:
-            // O(n)
-            template <class Key, enable_if_t<is_key_view_type<Key>>  = enabled{}>
-            [[nodiscard]] size_type count(const Key& key) const noexcept
-            {
-                return find(key) != end() ? 1 : 0;
-            }
-
-            // O(n)
-            template <class Key, enable_if_t<is_key_view_type<Key>>  = enabled{}>
-            [[nodiscard]] iterator find(const Key& key) noexcept
-            {
-                for (auto it = begin(); it != end(); ++it)
-                    if (key_equal_comparer_(key, it->first))
-                        return it;
-                return end();
-            }
-
-            // O(n)
-            template <class Key, enable_if_t<is_key_view_type<Key>>  = enabled{}>
-            [[nodiscard]] const_iterator find(const Key& key) const noexcept
-            {
-                for (auto it = begin(); it != end(); ++it)
-                    if (key_equal_comparer_(key, it->first))
-                        return it;
-                return end();
-            }
-
-            // O(n)
-            template <class Key, enable_if_t<is_key_view_type<Key>>  = enabled{}>
-            [[nodiscard]] mapped_type& at(const Key& key)
-            {
-                if (auto it = find(key); it != end()) return it->second;
-                else throw std::out_of_range("no such key");
-            }
-
-            // O(n)
-            template <class Key, enable_if_t<is_key_view_type<Key>>  = enabled{}>
-            [[nodiscard]] const mapped_type& at(const Key& key) const
-            {
-                if (auto it = find(key); it != end()) return it->second;
-                else throw std::out_of_range("no such key");
-            }
-
-            // O(n)
-            template <class KeyValuePair, enable_if_t<kvp_is_constructible_from<KeyValuePair>>  = enabled{}>
-            std::pair<iterator, bool> insert(KeyValuePair&& value)
-            {
-                if (auto it = find(value.first); it != end()) return {it, false};
-                return emplace_back(std::forward<decltype(value)>(value));
-            }
-
-            // O(n)
-            template <class... Args, enable_if_t<kvp_is_constructible_from<Args...>>  = enabled{}>
-            std::pair<iterator, bool> emplace(Args&&... args)
-            {
-                auto ret = emplace_back(std::forward<Args>(args)...);
-                if (auto it = find(ret.first->first); it != ret.first)
-                {
-                    base_container::pop_back();
-                    return {it, false};
-                }
-                return ret;
-            }
-
-            // O(n)
-            template <class Key, class Value, enable_if_t<key_is_constructible_from<Key>, value_is_constructible_from<Value>>  = enabled{}>
-            std::pair<iterator, bool> insert_or_assign(Key&& key, Value&& val)
-            {
-                if (auto it = find(key); it != end())
-                {
-                    it->second = std::forward<Value>(val);
-                    return {it, false};
-                }
-                else
-                {
-                    return emplace_back(
-                        std::piecewise_construct,
-                        std::forward_as_tuple(std::forward<decltype(key)>(key)),
-                        std::forward_as_tuple(std::forward<decltype(val)>(val)));
-                }
-            }
-
-            // O(n)
-            template <class Key, class... ValueArgs, enable_if_t<key_is_constructible_from<Key>, value_is_constructible_from<ValueArgs...>>  = enabled{}>
-            std::pair<iterator, bool> try_emplace(Key&& key, ValueArgs&&... args)
-            {
-                if (auto it = find(key); it != end())
-                    return {it, false};
-                else
-                    return emplace_back(
-                        std::piecewise_construct,
-                        std::forward_as_tuple(std::forward<decltype(key)>(key)),
-                        std::forward_as_tuple(std::forward<decltype(args)>(args)...));
-            }
-
-            // O(n)
-            template <class Key, enable_if_t<key_is_constructible_from<Key>>  = enabled{}>
-            mapped_type& operator [](const Key& key)
-            {
-                if (auto it = find(key); it != end())
-                    return it->second;
-                else
-                    return emplace_back(
-                        std::piecewise_construct,
-                        std::forward_as_tuple(std::forward<decltype(key)>(key)),
-                        std::forward_as_tuple()).first->second;
-            }
-
-            // O(1)
             using base_container::clear;
+            std::pair<iterator, bool> insert(const pair_type& p) { return operate_insert(std::forward<decltype(p)>(p)); }
+            std::pair<iterator, bool> insert(pair_type&& p) { return operate_insert(std::forward<decltype(p)>(p)); }
+            template <class InputIterator> void insert(InputIterator first, InputIterator last) { for (auto it = first; it != last; ++it) this->insert(*it); }
+            void insert(std::initializer_list<pair_type> init) { this->insert(init.begin(), init.end()); }
+            template <class... Args> ENABLE_IF<std::pair<iterator, bool>, pair_is_constructible_from<Args...>> emplace(Args&&... args) { return operate_insert(pair_type(std::forward<args>(args)...)); }
+            template <class Value> ENABLE_IF<std::pair<iterator, bool>, value_is_constructible_from<Value>> insert_or_assign(const key_type& key, Value&& val) { return operate_emplace<or_assign>(std::forward<decltype(key)>(key), std::forward<decltype(val)>(val)); }
+            template <class Value> ENABLE_IF<std::pair<iterator, bool>, value_is_constructible_from<Value>> insert_or_assign(key_type&& key, Value&& val) { return operate_emplace<or_assign>(std::forward<decltype(key)>(key), std::forward<decltype(val)>(val)); }
+            template <class... VArgs> ENABLE_IF<std::pair<iterator, bool>, value_is_constructible_from<VArgs...>> try_emplace(const key_type& k, VArgs&&... args) { return operate_emplace(std::forward<decltype(k)>(k), std::forward<decltype(args)>(args)...); }
+            template <class... VArgs> ENABLE_IF<std::pair<iterator, bool>, value_is_constructible_from<VArgs...>> try_emplace(key_type&& k, VArgs&&... args) { return operate_emplace(std::forward<decltype(k)>(k), std::forward<decltype(args)>(args)...); }
+            using Container::erase;
+            size_type erase(const key_type& key) { return operate_erase(key); }
+            template <class Key> ENABLE_IF<size_type, key_is_comparable_with<Key>> erase(const Key& key) { return operate_erase(key); }
+            [[nodiscard]] size_type count(const key_type& key) const noexcept { return operate_find(begin(), end(), key) != end() ? 1 : 0; }
+            template <class Key> [[nodiscard]] ENABLE_IF<size_type, key_is_comparable_with<Key>> count(const Key& key) const noexcept { return operate_find(key) != end() ? 1 : 0; }
+            [[nodiscard]] iterator find(const key_type& key) noexcept { return operate_find(begin(), end(), key); }
+            [[nodiscard]] const_iterator find(const key_type& key) const noexcept { return operate_find(begin(), end(), key); }
+            template <class Key> [[nodiscard]] ENABLE_IF<iterator, key_is_comparable_with<Key>> find(const Key& key) noexcept { return operate_find(begin(), end(), key); }
+            template <class Key> [[nodiscard]] ENABLE_IF<const_iterator, key_is_comparable_with<Key>> find(const Key& key) const noexcept { return operate_find(begin(), end(), key); }
+            [[nodiscard]] mapped_type& at(const key_type& key) { return operate_find<or_throw_if_not_found>(begin(), end(), key)->second; }
+            [[nodiscard]] const mapped_type& at(const key_type& key) const { return operate_find<or_throw_if_not_found>(begin(), end(), key)->second; }
+            template <class Key> [[nodiscard]] ENABLE_IF<mapped_type&, key_is_comparable_with<Key>> at(const Key& key) { return operate_find<or_throw_if_not_found>(begin(), end(), key)->second; }
+            template <class Key> [[nodiscard]] ENABLE_IF<const mapped_type&, key_is_comparable_with<Key>> at(const Key& key) const { return operate_find<or_throw_if_not_found>(begin(), end(), key)->second; }
+            using base_container::data;
+            [[nodiscard]] mapped_type& operator[](const key_type& key) { return try_emplace(key).first->second; }
 
-            // O(n)
-            using base_container::erase;
+            friend bool operator ==(const linear_map& lhs, const linear_map& rhs) noexcept { return static_cast<const Container&>(lhs) == static_cast<const Container&>(rhs); }
+            friend bool operator !=(const linear_map& lhs, const linear_map& rhs) noexcept { return static_cast<const Container&>(lhs) != static_cast<const Container&>(rhs); }
 
-            // O(n)
-            template <class Key, enable_if_t<is_key_view_type<Key>>  = enabled{}>
-            size_type erase(const Key& key)
+            friend void swap(linear_map& lhs, linear_map& rhs) noexcept
             {
-                if (auto it = find(key); it != end())
+                using std::swap;
+                swap(static_cast<Container&>(lhs), static_cast<Container&>(rhs));
+                swap(lhs.comparer_, rhs.comparer_);
+            }
+
+        private: // private modifier implementations
+
+            enum operate_find_option { or_throw_if_not_found = 1 };
+
+            template <operate_find_option on_not_found = operate_find_option{}, class Iterator, class Key>
+            [[nodiscard]] Iterator operate_find(Iterator begin, Iterator end, const Key& key) const noexcept(!(on_not_found & or_throw_if_not_found))
+            {
+                for (auto it = begin; it != end; ++it) if (comparer_(it->first, key)) return it;
+                if constexpr (on_not_found == or_throw_if_not_found) { throw std::out_of_range("out of range"); }
+                return end;
+            }
+
+            enum operate_insert_option { or_assign = 1 };
+
+            template <operate_insert_option on_already_exists = operate_insert_option{}, class KeyValuePair>
+            [[nodiscard]] std::pair<iterator, bool> operate_insert(KeyValuePair&& pair)
+            {
+                if (auto it = operate_find(begin(), end(), pair.first); it != end())
+                {
+                    if constexpr (on_already_exists == or_assign) it->second = std::forward<decltype(pair)>(pair).second;
+                    return {it, false};
+                }
+                else
+                {
+                    base_container::emplace_back(std::forward<decltype(pair)>(pair));
+                    return {base_container::end() - 1, true};
+                }
+            }
+
+            template <operate_insert_option on_already_exists = operate_insert_option{}, class Iterator>
+            void operate_insert(Iterator first, Iterator last)
+            {
+                for (auto it = first; it != last; ++it)
+                    (void)operate_insert<on_already_exists>(*it);
+            }
+
+            template <operate_insert_option on_already_exists = operate_insert_option{}, class Key, class... Value>
+            [[nodiscard]] std::pair<iterator, bool> operate_emplace(Key&& key, Value&&... value)
+            {
+                if (auto it = operate_find(begin(), end(), key); it != end())
+                {
+                    if constexpr (on_already_exists == or_assign) it->second = mapped_type(std::forward<decltype(value)>(value)...);
+                    return {it, false};
+                }
+                else
+                {
+                    base_container::emplace_back(std::piecewise_construct, std::forward_as_tuple(std::forward<decltype(key)>(key)), std::forward_as_tuple(std::forward<decltype(value)>(value)...));
+                    return {base_container::end() - 1, true};
+                }
+            }
+
+            template <class Key>
+            [[nodiscard]] size_type operate_erase(const Key& key) noexcept
+            {
+                if (auto it = operate_find(begin(), end(), key); it != end())
                 {
                     base_container::erase(it);
                     return 1;
@@ -404,8 +403,8 @@ namespace nanojson3
         using js_array = std::vector<json, allocator_type_for<json>>;
         using js_object_key = js_string;
         using js_object_key_view = js_string_view;
-        using js_object_kvp = std::pair<js_object_key, json>;
-        using js_object = containers::linear_kvs<js_object_key, json, std::equal_to<>, allocator_type_for<js_object_kvp>>;
+        using js_object_kvp = containers::key_value_pair<js_object_key, json>;
+        using js_object = containers::linear_map<js_object_key, json, std::equal_to<>, std::vector<js_object_kvp, allocator_type_for<js_object_kvp>>>;
 
         using js_variant = std::variant<js_undefined, js_null, js_boolean, js_integer, js_floating, js_string, js_array, js_object>;
 
