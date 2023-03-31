@@ -444,8 +444,12 @@ namespace nanojson3
         json(T&& value) : json(json_serializer<std::decay_t<T>>::serialize(std::forward<T>(value))) { }
 
         // serialize construct (initializer-list)
-        template <class E, std::enable_if_t<std::is_same_v<decltype(json_serializer<std::initializer_list<E>>::serialize(std::declval<std::initializer_list<E>>())), json>>* = nullptr>
-        json(std::initializer_list<E>&& value) : json(json_serializer<std::decay_t<std::initializer_list<E>>>::serialize(std::forward<std::initializer_list<E>>(value))) { }
+        // :: Disable ::
+        //   If some code brace-initializes a JSON, such as `auto j = json{js_null{}};`,
+        //   this constructor creates an `array` containing one null element (`[null]`)
+        //   rather than a simple naked `null`. It may be unintentional behaviour.
+        //template <class E, std::enable_if_t<std::is_same_v<decltype(json_serializer<std::initializer_list<E>>::serialize(std::declval<std::initializer_list<E>>())), json>>* = nullptr>
+        //json(std::initializer_list<E>&& value) : json(json_serializer<std::decay_t<std::initializer_list<E>>>::serialize(std::forward<std::initializer_list<E>>(value))) { }
 
         // prevent unintended implicit conversion
         template <class T, std::enable_if_t<!std::is_same_v<decltype(json_serializer<std::decay_t<T>>::serialize(std::declval<T>())), json>>* = nullptr>
@@ -569,7 +573,7 @@ namespace nanojson3
     public: // undefined_reference
         [[nodiscard]] static const json& undefined_reference() noexcept
         {
-            static json undefined{js_undefined{}};
+            static json undefined(js_undefined{});
             return undefined;
         }
     };
