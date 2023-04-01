@@ -1,56 +1,97 @@
-# nanojson (v3) - Simple json reader/writer for C++17
+# nanojson (v3) - Simple JSON reader/writer for C++17
 
 🌟 Single C++ header only. ALL in [nanojson3.h](nanojson3.h).
 
-This project is an experimental, proof-of-concept, implementation of json library using modern C++17 functions.
+This project is an experimental, proof-of-concept, implementation of JSON library using modern C++17 functions.
 
-This is the version 3 of the nanojson library, which is wrote from scratch.
-There is no API compatibility from previous version of the nanojson.
-The previous version is in `v1` or `v2` branch.
+This is the version 3 of the nanojson library.
+There is no API compatibility from previous major versions of the nanojson.
+The previous versions are in `v1` or `v2` branch.
 
 ## 🌟 License
 [MIT License. (c) 2016-2023 ttsuki](LICENSE)
 
-## 🌟 The Concept ⚡
+## 🌟 The Concept ⚡ and basic functions
 
-This library provides simply a json implementation type `json` such as
+This library provides simply a JSON implementation type `json` and i/o functions:
 
 ```cpp
 // psudo-code
 
+namespace njs3 {
+
 class json
 {
-    using js_undefined = ...;
-    using js_null = std::nullptr_t;
-    using js_boolean = bool;
-    using js_integer = long long;
-    using js_floating = long double;
-    using js_string = std::string;
-    using js_array = std::vector<json>;
-    using js_object = std::map<js_string, json>;
-    
-    // member
-    std::variant<
-        js_undefined,
-        js_null,
-        js_boolean,
-        js_integer,
-        js_floating,
-        js_string,
-        js_array,
-        js_object> value_;
+  // typedefs
+  using js_undefined = ...;
+  using js_null      = std::nullptr_t;
+  using js_boolean   = bool;
+  using js_integer   = long long int;
+  using js_floating  = long double;
+  using js_string    = std::string -like container;
+  using js_array     = std::vector<json> -like container;
+  using js_object    = std::map<js_string, json> -like container;
 
-    // with accessors,
-    bool    operator -> is_*();  // value accessor
-    value&  operator -> get_*(); // value accessor
-    json& operator [int]       // array child reference
-    json& operator [string]    // object child reference
+  // the value holder
+  private: std::variant<js_*...> value_;
 
-    // and some useful helper objects/functions.
-    class json_reader; // parse from string or istream.
-    class json_writer; // write  to  string or ostream.
-    json(...);         // constructor overloads for vary types.
+  // constructor family
+  json(js_null);
+  json(js_boolean);
+    ⋮
+  json(js_object); 
+  template<class T> json(T);  // and templated ctor imports various types with json_serializer.
+
+  // `->is_*` family checks value contains the type
+  bool         operator ->is_undefined();
+  bool         operator ->is_defined(); // not a undefined.
+  bool         operator ->is_null();
+  bool         operator ->is_boolean();
+    ⋮
+  bool         operator ->is_object();
+
+  // `->as_*` family accesses value with type checking or returns nullptr
+  js_null*     operator ->as_null();    
+  js_boolean*  operator ->as_boolean(); 
+  js_integer   operator ->get_integer();
+    ⋮
+  js_object*   operator ->as_object();
+
+  // `->get_*` family accesses value with type checking or throws `bad_access` exception
+  js_null      operator ->get_null();   
+  js_boolean   operator ->get_boolean();
+  js_integer   operator ->get_integer();
+    ⋮
+  js_object    operator ->get_object();
+
+  // `operator[]` family accesses children elements.
+  // returns the reference to the child element of `js_array`/`js_object`.
+  // if no such element exisit, returns`js_undefined`.
+  json& operator[int index];
+  json& operator[string key];
 };
+
+enum json_parse_option { ... };
+enum json_serialize_option { ... };
+struct json_floating_format_options{ ... };
+
+// parser and serializer
+json    parse_json(string_view sv, json_parse_option loose = json_parse_option::default_option)
+string  serialize_json(json value, json_serialize_option option = json_serialize_option::none, json_floating_format_options floating_format = {})
+
+// iostream operators and maniplators
+// usage: `std::cin  >> njs3::json_set_option(njs3::json_parse_option::default) >> json;`
+// usage: `std::cout << njs3::json_set_option(njs3::json_serialize_option::pretty) << json;`
+
+// `json` constructor customization point. (for templated constructor `json(T)`)
+template <T, class = void>
+struct json_serializer
+{
+  static json serialize(T) { return /* implement here */; }
+};
+
+} // end of namespace 
+
 ```
 ## 🌟 Sample Code Snippets
 
@@ -135,7 +176,7 @@ std::cout << njs3::json_out_pretty << parse_json(
 }
 ```
 
-### 🌟 Basic Read/Write Access To Json Object
+### 🌟 Basic Read/Write Access To JSON Object
 
 👇 input
 ````cpp
