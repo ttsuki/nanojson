@@ -1107,6 +1107,7 @@ namespace nanojson3
 
             if (input_.eat(']')) return result; // empty array
 
+            ret.reserve(8);
             while (true)
             {
                 // read value
@@ -1139,22 +1140,20 @@ namespace nanojson3
 
             if (input_.eat('}')) return result; // empty object_t
 
+            ret.reserve(8);
             while (true)
             {
                 // read key
-                json key = [&]
+                js_string key;
                 {
-                    if (*input_ == '"') return read_string(); // quoted key (normal)
+                    if (*input_ == '"') key = std::move(*read_string()->as_string()); // quoted key (normal)
                     else if (has_option(json_parse_option::allow_unquoted_object_key))
                     {
-                        json k(in_place_index::string);                           // make empty string(object key)
-                        json::js_string& t = *k->as_string();                     // and get reference to it.
                         while (*input_ != EOF && *input_ > ' ' && *input_ != ':') // until delimiter found
-                            t += static_cast<char_type>(*input_++);               // read a character as  object key
-                        return k;
+                            key += static_cast<char_type>(*input_++);             // read a character as  object key
                     }
                     else throw bad_format("invalid object format: expected object key", *input_);
-                }();
+                }
 
                 eat_whitespaces();
 
@@ -1165,7 +1164,7 @@ namespace nanojson3
 
                 // read value
                 json value = read_element();
-                ret.insert_or_assign(std::move(*key->as_string()), std::move(value));
+                ret.insert_or_assign(std::move(key), std::move(value));
 
                 eat_whitespaces();
 
