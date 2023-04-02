@@ -53,7 +53,7 @@ class json
   // `->as_*` family accesses value with type checking or returns nullptr
   js_null*     operator ->as_null();    
   js_boolean*  operator ->as_boolean(); 
-  js_integer   operator ->get_integer();
+  js_integer*  operator ->as_integer();
     ⋮
   js_object*   operator ->as_object();
 
