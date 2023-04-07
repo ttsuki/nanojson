@@ -404,6 +404,7 @@ namespace nanojson3
         using js_object_kvp = containers::key_value_pair<js_object_key, json>;
         using js_object = containers::linear_map<js_object_key, json, std::equal_to<>, std::vector<js_object_kvp, allocator_type_for<js_object_kvp>>>;
         using js_variant = std::variant<js_undefined, js_null, js_boolean, js_integer, js_floating, js_string, js_array, js_object>;
+        template <json_type_index ti> using js_type_by_index = std::variant_alternative_t<static_cast<size_t>(ti), js_variant>;
 
         using json_string = std::basic_string<char_type, char_traits, allocator_type_for<char_type>>;
         using json_string_view = std::basic_string_view<char_type, char_traits>;
@@ -476,62 +477,60 @@ namespace nanojson3
             [[nodiscard]] json_type_index get_type() const noexcept { return static_cast<json_type_index>(value_.index()); }
             [[nodiscard]] const js_variant& as_variant() const noexcept { return value_; }
 
-            template <class T> [[nodiscard]] bool is() const noexcept { return std::holds_alternative<T>(value_); }
-            [[nodiscard]] bool is_defined() const noexcept { return !is<js_undefined>(); }
-            [[nodiscard]] bool is_undefined() const noexcept { return is<js_undefined>(); }
-            [[nodiscard]] bool is_null() const noexcept { return is<js_null>(); }
-            [[nodiscard]] bool is_boolean() const noexcept { return is<js_boolean>(); }
-            [[nodiscard]] bool is_integer() const noexcept { return is<js_integer>(); }
-            [[nodiscard]] bool is_floating() const noexcept { return is<js_floating>(); }
-            [[nodiscard]] bool is_string() const noexcept { return is<js_string>(); }
-            [[nodiscard]] bool is_array() const noexcept { return is<js_array>(); }
-            [[nodiscard]] bool is_object() const noexcept { return is<js_object>(); }
+            template <json_type_index TypeIndex> [[nodiscard]] bool is() const noexcept { return get_type() == TypeIndex; }
+            [[nodiscard]] bool is_undefined() const noexcept { return is<json_type_index::undefined>(); }
+            [[nodiscard]] bool is_null() const noexcept { return is<json_type_index::null>(); }
+            [[nodiscard]] bool is_boolean() const noexcept { return is<json_type_index::boolean>(); }
+            [[nodiscard]] bool is_integer() const noexcept { return is<json_type_index::integer>(); }
+            [[nodiscard]] bool is_floating() const noexcept { return is<json_type_index::floating>(); }
+            [[nodiscard]] bool is_string() const noexcept { return is<json_type_index::string>(); }
+            [[nodiscard]] bool is_array() const noexcept { return is<json_type_index::array>(); }
+            [[nodiscard]] bool is_object() const noexcept { return is<json_type_index::object>(); }
 
             // returns nullptr if type is mismatch
-            template <class T> [[nodiscard]] auto* as() const noexcept { return std::get_if<T>(&value_); }
-            [[nodiscard]] auto* as_null() const noexcept { return as<js_null>(); }
-            [[nodiscard]] auto* as_boolean() const noexcept { return as<js_boolean>(); }
-            [[nodiscard]] auto* as_integer() const noexcept { return as<js_integer>(); }
-            [[nodiscard]] auto* as_floating() const noexcept { return as<js_floating>(); }
-            [[nodiscard]] auto* as_string() const noexcept { return as<js_string>(); }
-            [[nodiscard]] auto* as_array() const noexcept { return as<js_array>(); }
-            [[nodiscard]] auto* as_object() const noexcept { return as<js_object>(); }
+            template <json_type_index TypeIndex> [[nodiscard]] auto as() const noexcept { return std::get_if<js_type_by_index<TypeIndex>>(&value_); }
+            [[nodiscard]] auto* as_null() const noexcept { return as<json_type_index::null>(); }
+            [[nodiscard]] auto* as_boolean() const noexcept { return as<json_type_index::boolean>(); }
+            [[nodiscard]] auto* as_integer() const noexcept { return as<json_type_index::integer>(); }
+            [[nodiscard]] auto* as_floating() const noexcept { return as<json_type_index::floating>(); }
+            [[nodiscard]] auto* as_string() const noexcept { return as<json_type_index::string>(); }
+            [[nodiscard]] auto* as_array() const noexcept { return as<json_type_index::array>(); }
+            [[nodiscard]] auto* as_object() const noexcept { return as<json_type_index::object>(); }
 
             // throws bad_access if type is mismatch
-            template <class T> [[nodiscard]] T get() const { return as<T>() ? *as<T>() : throw bad_access(); }
-            [[nodiscard]] js_null get_null() const { return get<js_null>(); }
-            [[nodiscard]] js_boolean get_boolean() const { return get<js_boolean>(); }
-            [[nodiscard]] js_integer get_integer() const { return get<js_integer>(); }
-            [[nodiscard]] js_floating get_floating() const { return get<js_floating>(); }
-            [[nodiscard]] js_string get_string() const { return get<js_string>(); }
-            [[nodiscard]] js_array get_array() const { return get<js_array>(); }
-            [[nodiscard]] js_object get_object() const { return get<js_object>(); }
+            template <json_type_index TypeIndex> [[nodiscard]] auto get() const { return is<TypeIndex>() ? *as<TypeIndex>() : throw bad_access(); }
+            [[nodiscard]] js_null get_null() const { return get<json_type_index::null>(); }
+            [[nodiscard]] js_boolean get_boolean() const { return get<json_type_index::boolean>(); }
+            [[nodiscard]] js_integer get_integer() const { return get<json_type_index::integer>(); }
+            [[nodiscard]] js_floating get_floating() const { return get<json_type_index::floating>(); }
+            [[nodiscard]] js_string get_string() const { return get<json_type_index::string>(); }
+            [[nodiscard]] js_array get_array() const { return get<json_type_index::array>(); }
+            [[nodiscard]] js_object get_object() const { return get<json_type_index::object>(); }
 
             // returns default_value if type is mismatch
-            template <class T, class U, std::enable_if_t<std::is_convertible_v<U&&, T>>* = nullptr> [[nodiscard]] T get_or(U&& default_value) const noexcept { return as<T>() ? *as<T>() : static_cast<T>(std::forward<U>(default_value)); }
-            [[nodiscard]] js_null get_null_or(js_null default_value) const noexcept { return get_or<js_null>(default_value); }
-            [[nodiscard]] js_boolean get_boolean_or(js_boolean default_value) const noexcept { return get_or<js_boolean>(default_value); }
-            [[nodiscard]] js_integer get_integer_or(js_integer default_value) const noexcept { return get_or<js_integer>(default_value); }
-            [[nodiscard]] js_floating get_floating_or(js_floating default_value) const noexcept { return get_or<js_floating>(default_value); }
-            [[nodiscard]] js_string get_string_or(const js_string& default_value) const noexcept { return get_or<js_string>(default_value); }
-            [[nodiscard]] js_string get_string_or(js_string&& default_value) const noexcept { return get_or<js_string>(std::move(default_value)); }
-            [[nodiscard]] js_array get_array_or(const js_array& default_value) const noexcept { return get_or<js_array>(default_value); }
-            [[nodiscard]] js_array get_array_or(js_array&& default_value) const noexcept { return get_or<js_array>(std::move(default_value)); }
-            [[nodiscard]] js_object get_object_or(const js_object& default_value) const noexcept { return get_or<js_object>(default_value); }
-            [[nodiscard]] js_object get_object_or(js_object&& default_value) const noexcept { return get_or<js_object>(std::move(default_value)); }
+            template <json_type_index TypeIndex, class U = js_type_by_index<TypeIndex>, std::enable_if_t<std::is_convertible_v<U, js_type_by_index<TypeIndex>>>* = nullptr> [[nodiscard]] js_type_by_index<TypeIndex> get_or(U&& default_value) const noexcept { return as<TypeIndex>() ? *as<TypeIndex>() : static_cast<js_type_by_index<TypeIndex>>(std::forward<U>(default_value)); }
+            template <class U = js_null, std::enable_if_t<std::is_convertible_v<U, js_null>>* = nullptr> [[nodiscard]] js_null get_null_or(U&& default_value) const noexcept { return get_or<json_type_index::null>(std::forward<U>(default_value)); }
+            template <class U = js_boolean, std::enable_if_t<std::is_convertible_v<U, js_boolean>>* = nullptr> [[nodiscard]] js_boolean get_boolean_or(U&& default_value) const noexcept { return get_or<json_type_index::boolean>(std::forward<U>(default_value)); }
+            template <class U = js_integer, std::enable_if_t<std::is_convertible_v<U, js_integer>>* = nullptr> [[nodiscard]] js_integer get_integer_or(U&& default_value) const noexcept { return get_or<json_type_index::integer>(std::forward<U>(default_value)); }
+            template <class U = js_floating, std::enable_if_t<std::is_convertible_v<U, js_floating>>* = nullptr> [[nodiscard]] js_floating get_floating_or(U&& default_value) const noexcept { return get_or<json_type_index::floating>(std::forward<U>(default_value)); }
+            template <class U = js_string, std::enable_if_t<std::is_convertible_v<U, js_string>>* = nullptr> [[nodiscard]] js_string get_string_or(U&& default_value) const noexcept { return get_or<json_type_index::string>(std::forward<U>(default_value)); }
+            template <class U = js_array, std::enable_if_t<std::is_convertible_v<U, js_array>>* = nullptr> [[nodiscard]] js_array get_array_or(U&& default_value) const noexcept { return get_or<json_type_index::array>(std::forward<U>(default_value)); }
+            template <class U = js_object, std::enable_if_t<std::is_convertible_v<U, js_object>>* = nullptr> [[nodiscard]] js_object get_object_or(U&& default_value) const noexcept { return get_or<json_type_index::object>(std::forward<U>(default_value)); }
+
+            [[nodiscard]] bool is_defined() const noexcept { return !is_undefined(); }
 
             // (integer or floating) as floating
             [[nodiscard]] bool is_number() const noexcept
             {
-                return is<js_integer>() || is<js_floating>();
+                return is_integer() || is_number();
             }
 
             // (integer or floating) as floating
             [[nodiscard]] std::optional<js_number> as_number() const noexcept
             {
-                if (const auto num = as<js_integer>()) return std::optional<js_number>(std::in_place, static_cast<js_floating>(*num));
-                if (const auto num = as<js_floating>()) return std::optional<js_number>(std::in_place, *num);
-                return std::optional<js_number>{};
+                if (const auto num = as_integer()) return std::make_optional(static_cast<js_number>(*num));
+                if (const auto num = as_floating()) return std::make_optional(static_cast<js_number>(*num));
+                return std::nullopt;
             }
 
             // (integer or floating) as floating
@@ -542,7 +541,7 @@ namespace nanojson3
             }
 
             // (integer or floating) as floating
-            template <class U, std::enable_if_t<std::is_convertible_v<U&&, js_number>>* = nullptr>
+            template <class U = js_number, std::enable_if_t<std::is_convertible_v<U, js_number>>* = nullptr>
             [[nodiscard]] js_number get_number_or(U&& default_value) const
             {
                 if (const auto num = as_number()) return *num;
@@ -576,6 +575,65 @@ namespace nanojson3
             static json undefined(js_undefined{});
             return undefined;
         }
+
+    public: // value access shortcut
+
+        [[nodiscard]] json_type_index get_type() const noexcept { return value().get_type(); }
+        [[nodiscard]] const js_variant& as_variant() const noexcept { return value().as_variant(); }
+
+        template <json_type_index TypeIndex> [[nodiscard]] bool is() const noexcept { return value().is<TypeIndex>(); }
+        [[nodiscard]] bool is_defined() const noexcept { return value().is_defined(); }
+        [[nodiscard]] bool is_undefined() const noexcept { return value().is_undefined(); }
+        [[nodiscard]] bool is_null() const noexcept { return value().is_null(); }
+        [[nodiscard]] bool is_boolean() const noexcept { return value().is_boolean(); }
+        [[nodiscard]] bool is_integer() const noexcept { return value().is_integer(); }
+        [[nodiscard]] bool is_floating() const noexcept { return value().is_floating(); }
+        [[nodiscard]] bool is_number() const noexcept { return value().is_number(); }
+        [[nodiscard]] bool is_string() const noexcept { return value().is_string(); }
+        [[nodiscard]] bool is_array() const noexcept { return value().is_array(); }
+        [[nodiscard]] bool is_object() const noexcept { return value().is_object(); }
+
+        // returns nullptr if type is mismatch
+        template <json_type_index TypeIndex> [[nodiscard]] const auto* as() const noexcept { return value().as<TypeIndex>(); }
+        [[nodiscard]] const js_null* as_null() const noexcept { return value().as_null(); }
+        [[nodiscard]] const js_boolean* as_boolean() const noexcept { return value().as_boolean(); }
+        [[nodiscard]] const js_integer* as_integer() const noexcept { return value().as_integer(); }
+        [[nodiscard]] const js_floating* as_floating() const noexcept { return value().as_floating(); }
+        [[nodiscard]] std::optional<js_number> as_number() const noexcept { return value().as_number(); }
+        [[nodiscard]] const js_string* as_string() const noexcept { return value().as_string(); }
+        [[nodiscard]] const js_array* as_array() const noexcept { return value().as_array(); }
+        [[nodiscard]] const js_object* as_object() const noexcept { return value().as_object(); }
+
+        template <json_type_index TypeIndex> [[nodiscard]] auto* as() noexcept { return value().as<TypeIndex>(); }
+        [[nodiscard]] js_null* as_null() noexcept { return value().as_null(); }
+        [[nodiscard]] js_boolean* as_boolean() noexcept { return value().as_boolean(); }
+        [[nodiscard]] js_integer* as_integer() noexcept { return value().as_integer(); }
+        [[nodiscard]] js_floating* as_floating() noexcept { return value().as_floating(); }
+        [[nodiscard]] js_string* as_string() noexcept { return value().as_string(); }
+        [[nodiscard]] js_array* as_array() noexcept { return value().as_array(); }
+        [[nodiscard]] js_object* as_object() noexcept { return value().as_object(); }
+
+        // throws bad_access if type is mismatch
+        template <json_type_index TypeIndex> [[nodiscard]] auto get() const { return value().get<TypeIndex>(); }
+        [[nodiscard]] js_null get_null() const { return value().get_null(); }
+        [[nodiscard]] js_boolean get_boolean() const { return value().get_boolean(); }
+        [[nodiscard]] js_integer get_integer() const { return value().get_integer(); }
+        [[nodiscard]] js_floating get_floating() const { return value().get_floating(); }
+        [[nodiscard]] js_number get_number() const { return value().get_number(); }
+        [[nodiscard]] js_string get_string() const { return value().get_string(); }
+        [[nodiscard]] js_array get_array() const { return value().get_array(); }
+        [[nodiscard]] js_object get_object() const { return value().get_object(); }
+
+        // returns default_value if type is mismatch
+        template <json_type_index TypeIndex, class U = js_type_by_index<TypeIndex>, std::enable_if_t<std::is_convertible_v<U, js_type_by_index<TypeIndex>>>* = nullptr> [[nodiscard]] js_type_by_index<TypeIndex> get_or(U&& default_value) const { return value().get_or<TypeIndex>(std::forward<U>(default_value)); }
+        template <class U = js_null, std::enable_if_t<std::is_convertible_v<U, js_null>>* = nullptr> [[nodiscard]] js_null get_null_or(U&& default_value) const { return value().get_null_or(std::forward<U>(default_value)); }
+        template <class U = js_boolean, std::enable_if_t<std::is_convertible_v<U, js_boolean>>* = nullptr> [[nodiscard]] js_boolean get_boolean_or(U&& default_value) const { return value().get_boolean_or(std::forward<U>(default_value)); }
+        template <class U = js_integer, std::enable_if_t<std::is_convertible_v<U, js_integer>>* = nullptr> [[nodiscard]] js_integer get_integer_or(U&& default_value) const { return value().get_integer_or(std::forward<U>(default_value)); }
+        template <class U = js_floating, std::enable_if_t<std::is_convertible_v<U, js_floating>>* = nullptr> [[nodiscard]] js_floating get_floating_or(U&& default_value) const { return value().get_floating_or(std::forward<U>(default_value)); }
+        template <class U = js_number, std::enable_if_t<std::is_convertible_v<U, js_number>>* = nullptr> [[nodiscard]] js_floating get_number_or(U&& default_value) const { return value().get_floating_or(std::forward<U>(default_value)); }
+        template <class U = js_string, std::enable_if_t<std::is_convertible_v<U, js_string>>* = nullptr> [[nodiscard]] js_string get_string_or(U&& default_value) const { return value().get_string_or(std::forward<U>(default_value)); }
+        template <class U = js_array, std::enable_if_t<std::is_convertible_v<U, js_array>>* = nullptr> [[nodiscard]] js_array get_array_or(U&& default_value) const { return value().get_array_or(std::forward<U>(default_value)); }
+        template <class U = js_object, std::enable_if_t<std::is_convertible_v<U, js_object>>* = nullptr> [[nodiscard]] js_object get_object_or(U&& default_value) const { return value().get_object_or(std::forward<U>(default_value)); }
     };
 
     class json::node_reference final
@@ -662,6 +720,65 @@ namespace nanojson3
             }
             else throw bad_access(); // can't write to undefined node
         }
+
+    public: // value access shortcut
+
+        [[nodiscard]] json_type_index get_type() const noexcept { return value().get_type(); }
+        [[nodiscard]] const js_variant& as_variant() const noexcept { return value().as_variant(); }
+
+        template <json_type_index TypeIndex> [[nodiscard]] bool is() const noexcept { return value().is<TypeIndex>(); }
+        [[nodiscard]] bool is_defined() const noexcept { return value().is_defined(); }
+        [[nodiscard]] bool is_undefined() const noexcept { return value().is_undefined(); }
+        [[nodiscard]] bool is_null() const noexcept { return value().is_null(); }
+        [[nodiscard]] bool is_boolean() const noexcept { return value().is_boolean(); }
+        [[nodiscard]] bool is_integer() const noexcept { return value().is_integer(); }
+        [[nodiscard]] bool is_floating() const noexcept { return value().is_floating(); }
+        [[nodiscard]] bool is_number() const noexcept { return value().is_number(); }
+        [[nodiscard]] bool is_string() const noexcept { return value().is_string(); }
+        [[nodiscard]] bool is_array() const noexcept { return value().is_array(); }
+        [[nodiscard]] bool is_object() const noexcept { return value().is_object(); }
+
+        // returns nullptr if type is mismatch
+        template <json_type_index TypeIndex> [[nodiscard]] const auto* as() const noexcept { return value().as<TypeIndex>(); }
+        [[nodiscard]] const js_null* as_null() const noexcept { return value().as_null(); }
+        [[nodiscard]] const js_boolean* as_boolean() const noexcept { return value().as_boolean(); }
+        [[nodiscard]] const js_integer* as_integer() const noexcept { return value().as_integer(); }
+        [[nodiscard]] const js_floating* as_floating() const noexcept { return value().as_floating(); }
+        [[nodiscard]] std::optional<js_number> as_number() const noexcept { return value().as_number(); }
+        [[nodiscard]] const js_string* as_string() const noexcept { return value().as_string(); }
+        [[nodiscard]] const js_array* as_array() const noexcept { return value().as_array(); }
+        [[nodiscard]] const js_object* as_object() const noexcept { return value().as_object(); }
+
+        template <json_type_index TypeIndex> [[nodiscard]] auto* as() noexcept { return value().as<TypeIndex>(); }
+        [[nodiscard]] js_null* as_null() noexcept { return value().as_null(); }
+        [[nodiscard]] js_boolean* as_boolean() noexcept { return value().as_boolean(); }
+        [[nodiscard]] js_integer* as_integer() noexcept { return value().as_integer(); }
+        [[nodiscard]] js_floating* as_floating() noexcept { return value().as_floating(); }
+        [[nodiscard]] js_string* as_string() noexcept { return value().as_string(); }
+        [[nodiscard]] js_array* as_array() noexcept { return value().as_array(); }
+        [[nodiscard]] js_object* as_object() noexcept { return value().as_object(); }
+
+        // throws bad_access if type is mismatch
+        template <json_type_index TypeIndex> [[nodiscard]] auto get() const { return value().get<TypeIndex>(); }
+        [[nodiscard]] js_null get_null() const { return value().get_null(); }
+        [[nodiscard]] js_boolean get_boolean() const { return value().get_boolean(); }
+        [[nodiscard]] js_integer get_integer() const { return value().get_integer(); }
+        [[nodiscard]] js_floating get_floating() const { return value().get_floating(); }
+        [[nodiscard]] js_number get_number() const { return value().get_number(); }
+        [[nodiscard]] js_string get_string() const { return value().get_string(); }
+        [[nodiscard]] js_array get_array() const { return value().get_array(); }
+        [[nodiscard]] js_object get_object() const { return value().get_object(); }
+
+        // returns default_value if type is mismatch
+        template <json_type_index TypeIndex, class U = js_type_by_index<TypeIndex>, std::enable_if_t<std::is_convertible_v<U, js_type_by_index<TypeIndex>>>* = nullptr> [[nodiscard]] js_type_by_index<TypeIndex> get_or(U&& default_value) const { return value().get_or<TypeIndex>(std::forward<U>(default_value)); }
+        template <class U = js_null, std::enable_if_t<std::is_convertible_v<U, js_null>>* = nullptr> [[nodiscard]] js_null get_null_or(U&& default_value) const { return value().get_null_or(std::forward<U>(default_value)); }
+        template <class U = js_boolean, std::enable_if_t<std::is_convertible_v<U, js_boolean>>* = nullptr> [[nodiscard]] js_boolean get_boolean_or(U&& default_value) const { return value().get_boolean_or(std::forward<U>(default_value)); }
+        template <class U = js_integer, std::enable_if_t<std::is_convertible_v<U, js_integer>>* = nullptr> [[nodiscard]] js_integer get_integer_or(U&& default_value) const { return value().get_integer_or(std::forward<U>(default_value)); }
+        template <class U = js_floating, std::enable_if_t<std::is_convertible_v<U, js_floating>>* = nullptr> [[nodiscard]] js_floating get_floating_or(U&& default_value) const { return value().get_floating_or(std::forward<U>(default_value)); }
+        template <class U = js_number, std::enable_if_t<std::is_convertible_v<U, js_number>>* = nullptr> [[nodiscard]] js_floating get_number_or(U&& default_value) const { return value().get_floating_or(std::forward<U>(default_value)); }
+        template <class U = js_string, std::enable_if_t<std::is_convertible_v<U, js_string>>* = nullptr> [[nodiscard]] js_string get_string_or(U&& default_value) const { return value().get_string_or(std::forward<U>(default_value)); }
+        template <class U = js_array, std::enable_if_t<std::is_convertible_v<U, js_array>>* = nullptr> [[nodiscard]] js_array get_array_or(U&& default_value) const { return value().get_array_or(std::forward<U>(default_value)); }
+        template <class U = js_object, std::enable_if_t<std::is_convertible_v<U, js_object>>* = nullptr> [[nodiscard]] js_object get_object_or(U&& default_value) const { return value().get_object_or(std::forward<U>(default_value)); }
     };
 
     inline json::const_node_reference json::operator[](js_array_index_view index) const noexcept
@@ -1643,7 +1760,7 @@ namespace nanojson3
     }
 
     // json stream operators and manipulators
-    // usage: `std::cin >> json_set_option(json_parse_option::default) << json;`
+    // usage: `std::cin >> json_set_option(json_parse_option::default) >> json;`
     // usage: `std::cout << json_set_option(json_serialize_option::pretty) << json;`
     using ios::json_ios_option;
     using ios::operator <<;

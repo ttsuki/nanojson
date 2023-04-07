@@ -42,27 +42,27 @@ class json
   json(js_object); 
   template<class T> json(T);  // and templated ctor imports various types with json_serializer.
 
-  // `->is_*` family checks value contains the type
-  bool         operator ->is_undefined();
-  bool         operator ->is_defined(); // not a undefined.
-  bool         operator ->is_null();
-  bool         operator ->is_boolean();
+  // `.is_*` family checks value contains the type
+  bool         is_undefined();
+  bool         is_defined(); // not a undefined.
+  bool         is_null();
+  bool         is_boolean();
     ⋮
-  bool         operator ->is_object();
+  bool         is_object();
 
-  // `->as_*` family accesses value with type checking or returns nullptr
-  js_null*     operator ->as_null();    
-  js_boolean*  operator ->as_boolean(); 
-  js_integer*  operator ->as_integer();
+  // `.as_*` family accesses value with type checking or returns nullptr
+  js_null*     as_null();    
+  js_boolean*  as_boolean(); 
+  js_integer*  as_integer();
     ⋮
-  js_object*   operator ->as_object();
+  js_object*   as_object();
 
-  // `->get_*` family accesses value with type checking or throws `bad_access` exception
-  js_null      operator ->get_null();   
-  js_boolean   operator ->get_boolean();
-  js_integer   operator ->get_integer();
+  // `.get_*` family accesses value with type checking or throws `bad_access` exception
+  js_null      get_null();   
+  js_boolean   get_boolean();
+  js_integer   get_integer();
     ⋮
-  js_object    operator ->get_object();
+  js_object    get_object();
 
   // `operator[]` family accesses children elements.
   // returns the reference to the child element of `js_array`/`js_object`.
@@ -235,7 +235,7 @@ std::cout << njs3::json_out_pretty << json;
 ※ Note: Numbers are parsed into integer or floating-point types,
          the type is determined by their value range and representation.
 
-👇 And that `json` object can be accessed by `operator[]` and `operator->` ...
+👇 And that `json` object can be accessed by `operator[]`.
 
 ```cpp
 //.cpp
@@ -257,53 +257,53 @@ catch (const njs3::bad_access& x)
 
 // Reading access:
 
-njs3::js_integer integer = json["integer"]->get_integer(); // OK
-//njs3::js_floating integer = json["integer"]->get_floating(); // throws bad_access (type mismatch)
+njs3::js_integer integer = json["integer"].get_integer(); // OK
+//njs3::js_floating integer = json["integer"].get_floating(); // throws bad_access (type mismatch)
 std::cout << DEBUG_OUTPUT(integer);
 
-njs3::js_floating float1 = json["float1"]->get_floating(); // OK
-//njs3::js_integer float1 = json["float1"]->get_integer();   // throws bad_access (type mismatch)
+njs3::js_floating float1 = json["float1"].get_floating(); // OK
+//njs3::js_integer float1 = json["float1"].get_integer();   // throws bad_access (type mismatch)
 std::cout << DEBUG_OUTPUT(float1);
 
-njs3::js_floating integer_as_number = json["integer"]->get_number(); // OK (converted to js_floating)
-njs3::js_floating float1_as_number = json["float1"]->get_number();   // OK
-njs3::js_floating float2_as_number = json["float2"]->get_number();   // OK
+njs3::js_floating integer_as_number = json["integer"].get_number(); // OK (converted to js_floating)
+njs3::js_floating float1_as_number = json["float1"].get_number();   // OK
+njs3::js_floating float2_as_number = json["float2"].get_number();   // OK
 std::cout << DEBUG_OUTPUT(integer_as_number);
 std::cout << DEBUG_OUTPUT(float1_as_number);
 std::cout << DEBUG_OUTPUT(float2_as_number);
 
-//  😃.o(`operator []` is used to reference node, `operator ->` is used to reference its value.)
+//  😃.o(`operator []` is used to reference sub-nodes)
 
-std::cout << DEBUG_OUTPUT(json["strings"]["にほんご"]->get_string()); // "//あいう\n\tえお"
-// std::cout << DEBUG_OUTPUT(json["strings"]["not defined value"]->get_string()); // throws bad_access (no such key.)
-std::cout << DEBUG_OUTPUT(json["strings"]["not defined value"]->get_string_or("failed")); // "failed": get_*_or method doesn't throw exception, returns argument `default_value` instead.
+std::cout << DEBUG_OUTPUT(json["strings"]["にほんご"].get_string()); // "//あいう\n\tえお"
+// std::cout << DEBUG_OUTPUT(json["strings"]["not defined value"].get_string()); // throws bad_access (no such key.)
+std::cout << DEBUG_OUTPUT(json["strings"]["not defined value"].get_string_or("failed")); // "failed": get_*_or method doesn't throw exception, returns argument `default_value` instead.
 
 // type-mismatched get access throws bad_access.
 try
 {
-    (void)json["this"]->get_integer();        // throws bad_access: json["this"] is string.
-    (void)json["this"]["foobar"]->get_null(); // throws bad_access: json["this"]["foobar"] is undefined (not a null).
+    (void)json["this"].get_integer();        // throws bad_access: json["this"] is string.
+    (void)json["this"]["foobar"].get_null(); // throws bad_access: json["this"]["foobar"] is undefined (not a null).
 }
 catch (const njs3::bad_access& x)
 {
     std::cerr << x.what() << std::endl;
 }
 
-std::cout << DEBUG_OUTPUT(json["strings"]->get_string_or("failed")); // "failed": type mismatch json is not string.
+std::cout << DEBUG_OUTPUT(json["strings"].get_string_or("failed")); // "failed": type mismatch json is not string.
 
 // Testing node existence:
 
-std::cout << DEBUG_OUTPUT(json->is_defined()); // true
-std::cout << DEBUG_OUTPUT(json->is_array());   // false
-std::cout << DEBUG_OUTPUT(json->is_object());  // true
+std::cout << DEBUG_OUTPUT(json.is_defined()); // true
+std::cout << DEBUG_OUTPUT(json.is_array());   // false
+std::cout << DEBUG_OUTPUT(json.is_object());  // true
 
 // Only referencing undefined node is not error.
-std::cout << DEBUG_OUTPUT(json["aaaa"]->is_defined());              // false: no such key.
-std::cout << DEBUG_OUTPUT(json["test_array"][12345]->is_defined()); // false: index is out of range.
+std::cout << DEBUG_OUTPUT(json["aaaa"].is_defined());              // false: no such key.
+std::cout << DEBUG_OUTPUT(json["test_array"][12345].is_defined()); // false: index is out of range.
 
-std::cout << DEBUG_OUTPUT(json["this"]->is_defined());                         // true
-std::cout << DEBUG_OUTPUT(json["this"]["node"]->is_defined());                 // false: doesn't emit bad_access
-std::cout << DEBUG_OUTPUT(json["Non-existent node"]["a child"]->is_defined()); // false: doesn't emit bad_access
+std::cout << DEBUG_OUTPUT(json["this"].is_defined());                         // true
+std::cout << DEBUG_OUTPUT(json["this"]["node"].is_defined());                 // false: doesn't emit bad_access
+std::cout << DEBUG_OUTPUT(json["Non-existent node"]["a child"].is_defined()); // false: doesn't emit bad_access
 
 ```
 
@@ -312,7 +312,7 @@ std::cout << DEBUG_OUTPUT(json["Non-existent node"]["a child"]->is_defined()); /
 //.cpp
 // Makes array from values
 njs3::json json = njs3::js_array{1, 2, 3, "a", true, false, 4.5, nullptr};
-if (auto a = json->as_array()) // gets js_array interface (is simply std::vector<json>
+if (auto a = json.as_array()) // gets js_array interface (is simply std::vector<json>
 {
     a->push_back(123);
     a->push_back("abc");
@@ -327,7 +327,7 @@ njs3::json json = njs3::js_object{
     {"b", 2},
     {"c", njs3::js_array{"X", "Y", "Z", 1, 2, 3}},
 };
-if (auto a = json->as_object()) // gets js_object interface (is simply std::map<js_string, json>)
+if (auto a = json.as_object()) // gets js_object interface (is simply std::map<js_string, json>)
 {
     a->insert_or_assign("d", 12345);
     a->insert_or_assign("e", "abc");
@@ -353,10 +353,10 @@ std::cout << njs3::json_out_pretty << json << std::endl;
     std::cout << njs3::json_out_pretty << json << std::endl;
 
     // `get_*` method assumes type is array. if not, throws bad_access
-    for (auto&& row : json->get_array())
+    for (auto&& row : json.get_array())
     {
         // `get_*_or` method checks type is array. if not, returns default value in argument
-        for (auto&& column : row->get_array_or({}))
+        for (auto&& column : row.get_array_or({}))
             std::cout << "  " << column;
         std::cout << "\n";
     }
@@ -412,7 +412,7 @@ std::cout << njs3::json_out_pretty << json << std::endl;
     };
     // std::array of json convertible type is converted into json::js_array
 
-    auto ref = json->as_array(); // get js_array interface (is simply std::vector<json>)
+    auto ref = json.as_array(); // get js_array interface (is simply std::vector<json>)
     ref->emplace_back(custom_struct{"the answer is", 43});
     ref->emplace_back(custom_struct{"the answer is", 44});
     ref->emplace_back(custom_struct{"the answer is", 45});
