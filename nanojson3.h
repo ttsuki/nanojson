@@ -891,9 +891,10 @@ namespace nanojson3
         } input_;
 
         json_parse_option option_bits_{};
+        json::js_string string_input_buffer_{};
 
         // ctor
-        json_reader(CharInputIterator begin, CharInputIterator end, json_parse_option option) : input_{begin, end}, option_bits_(option) { }
+        json_reader(CharInputIterator begin, CharInputIterator end, json_parse_option option) : input_{begin, end}, option_bits_(option), string_input_buffer_(256, '\0') { }
 
         // executes parsing
         [[nodiscard]] json execute()
@@ -1123,8 +1124,8 @@ namespace nanojson3
             assert(*input_ == '"');
             int_type quote = *input_++; // '"'
 
-            json result(in_place_index::string);         // make empty string
-            json::js_string& ret = *result->as_string(); // and get reference to it.
+            auto& ret = string_input_buffer_;
+            ret.clear();
 
             while (true)
             {
@@ -1209,7 +1210,7 @@ namespace nanojson3
                 ++input_;
             }
 
-            return result;
+            return json{in_place_index::string, ret}; // copy
         }
 
         // reads array `[...]`
