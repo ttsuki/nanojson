@@ -48,11 +48,9 @@
 
 namespace nanojson3
 {
-    namespace containers
+    // internal types
+    namespace internal
     {
-        template <class KeyType, class ValueType>
-        using key_value_pair = std::pair<const KeyType, ValueType>;
-
         namespace type_traits
         {
             template <class Comparer, class = void> struct is_comparer_transparent : std::false_type {};
@@ -62,9 +60,12 @@ namespace nanojson3
             template <class Comparer> static inline constexpr bool is_comparer_transparent_v = is_comparer_transparent<Comparer>::value;
         }
 
-        // simple key-value storage
+        template <class KeyType, class ValueType>
+        using key_value_pair = std::pair<const KeyType, ValueType>;
+
+        // simple key-value store
         template <class KeyType, class ValueType, class KeyEqualityComparer = std::equal_to<KeyType>, class Container = std::vector<key_value_pair<KeyType, ValueType>>>
-        class linear_map : Container
+        class key_value_store : Container
         {
         public: // typedefs
             using base_container = Container;
@@ -109,20 +110,20 @@ namespace nanojson3
             value_equality_compare comparer_{};
 
         public:
-            linear_map() = default;
-            explicit linear_map(const key_equality_compare& comp, const allocator_type& alloc = allocator_type{}) : base_container(alloc), comparer_(comp) { }
-            explicit linear_map(const allocator_type& alloc) : base_container(alloc) { }
-            template <class InputIterator> linear_map(InputIterator first, InputIterator last, const key_equality_compare& comp = key_equality_compare{}, const allocator_type& alloc = allocator_type{}) : Container(alloc), comparer_(comp) { operate_insert<or_assign>(first, last); }
-            template <class InputIterator> linear_map(InputIterator first, InputIterator last, const allocator_type& alloc) : base_container(alloc) { operate_insert<or_assign>(first, last); }
-            linear_map(const linear_map& other) = default;
-            linear_map(const linear_map& other, const allocator_type& allocator) : base_container(other, allocator), comparer_(other.comparer_) { }
-            linear_map(linear_map&& other) noexcept = default;
-            linear_map(linear_map&& other, const allocator_type& allocator) : base_container(std::move(other), allocator), comparer_(other.comparer_) { }
-            linear_map(std::initializer_list<value_type> init, const key_equality_compare& comp = key_equality_compare{}, const allocator_type& alloc = allocator_type{}) : Container(alloc), comparer_(comp) { operate_insert<or_assign>(init.begin(), init.end()); }
-            linear_map(std::initializer_list<value_type> init, const allocator_type& alloc) : base_container(alloc) { operate_insert<or_assign>(init.begin(), init.end()); }
-            ~linear_map() = default;
+            key_value_store() = default;
+            explicit key_value_store(const key_equality_compare& comp, const allocator_type& alloc = allocator_type{}) : base_container(alloc), comparer_(comp) { }
+            explicit key_value_store(const allocator_type& alloc) : base_container(alloc) { }
+            template <class InputIterator> key_value_store(InputIterator first, InputIterator last, const key_equality_compare& comp = key_equality_compare{}, const allocator_type& alloc = allocator_type{}) : Container(alloc), comparer_(comp) { operate_insert<or_assign>(first, last); }
+            template <class InputIterator> key_value_store(InputIterator first, InputIterator last, const allocator_type& alloc) : base_container(alloc) { operate_insert<or_assign>(first, last); }
+            key_value_store(const key_value_store& other) = default;
+            key_value_store(const key_value_store& other, const allocator_type& allocator) : base_container(other, allocator), comparer_(other.comparer_) { }
+            key_value_store(key_value_store&& other) noexcept = default;
+            key_value_store(key_value_store&& other, const allocator_type& allocator) : base_container(std::move(other), allocator), comparer_(other.comparer_) { }
+            key_value_store(std::initializer_list<value_type> init, const key_equality_compare& comp = key_equality_compare{}, const allocator_type& alloc = allocator_type{}) : Container(alloc), comparer_(comp) { operate_insert<or_assign>(init.begin(), init.end()); }
+            key_value_store(std::initializer_list<value_type> init, const allocator_type& alloc) : base_container(alloc) { operate_insert<or_assign>(init.begin(), init.end()); }
+            ~key_value_store() = default;
 
-            linear_map& operator=(const linear_map& other)
+            key_value_store& operator=(const key_value_store& other)
             {
                 if (this != std::addressof(other))
                 {
@@ -133,7 +134,7 @@ namespace nanojson3
                 return *this;
             }
 
-            linear_map& operator=(linear_map&& other) noexcept
+            key_value_store& operator=(key_value_store&& other) noexcept
             {
                 if (this != std::addressof(other))
                 {
@@ -187,10 +188,10 @@ namespace nanojson3
             using base_container::data;
             [[nodiscard]] mapped_type& operator[](const key_type& key) { return try_emplace(key).first->second; }
 
-            friend bool operator ==(const linear_map& lhs, const linear_map& rhs) noexcept { return static_cast<const Container&>(lhs) == static_cast<const Container&>(rhs); }
-            friend bool operator !=(const linear_map& lhs, const linear_map& rhs) noexcept { return static_cast<const Container&>(lhs) != static_cast<const Container&>(rhs); }
+            friend bool operator ==(const key_value_store& lhs, const key_value_store& rhs) noexcept { return static_cast<const Container&>(lhs) == static_cast<const Container&>(rhs); }
+            friend bool operator !=(const key_value_store& lhs, const key_value_store& rhs) noexcept { return static_cast<const Container&>(lhs) != static_cast<const Container&>(rhs); }
 
-            friend void swap(linear_map& lhs, linear_map& rhs) noexcept
+            friend void swap(key_value_store& lhs, key_value_store& rhs) noexcept
             {
                 using std::swap;
                 swap(static_cast<Container&>(lhs), static_cast<Container&>(rhs));
@@ -401,8 +402,8 @@ namespace nanojson3
         using js_array = std::vector<json, allocator_type_for<json>>;
         using js_object_key = js_string;
         using js_object_key_view = js_string_view;
-        using js_object_kvp = containers::key_value_pair<js_object_key, json>;
-        using js_object = containers::linear_map<js_object_key, json, std::equal_to<>, std::vector<js_object_kvp, allocator_type_for<js_object_kvp>>>;
+        using js_object_kvp = internal::key_value_pair<js_object_key, json>;
+        using js_object = internal::key_value_store<js_object_key, json, std::equal_to<>, std::vector<js_object_kvp, allocator_type_for<js_object_kvp>>>;
         using js_variant = std::variant<js_undefined, js_null, js_boolean, js_integer, js_floating, js_string, js_array, js_object>;
         template <json_type_index ti> using js_type_by_index = std::variant_alternative_t<static_cast<size_t>(ti), js_variant>;
 
