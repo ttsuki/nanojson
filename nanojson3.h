@@ -1922,7 +1922,9 @@ namespace njs3
         static constexpr auto json_in_strict = json_ios_option(json_parse_option::none);
         static constexpr auto json_in_default = json_ios_option(json_parse_option::default_option);
         static constexpr auto json_in_loose = json_ios_option(json_parse_option::all);
+        static constexpr auto json_out_minify = json_ios_option(json_serialize_option::none);
         static constexpr auto json_out_pretty = json_ios_option(json_serialize_option::pretty);
+        static constexpr auto json_out_debug = json_ios_option(json_serialize_option::pretty | json_serialize_option::debug_dump_type_as_comment);
     }
 
     using nanojson3::json_serializer;
