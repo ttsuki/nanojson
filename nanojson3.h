@@ -1852,7 +1852,7 @@ namespace nanojson3
         }
     };
 
-    // map `T` to `json` if `T` has member function `json T::to_json() const`
+    // map `T` to `json` if `T` has member function `json_string T::to_json() const`
     template <class T>
     struct json_serializer<T, std::enable_if_t<std::is_convertible_v<std::invoke_result_t<decltype(&T::to_json), const T&>, json::json_string_view>>>
     {
