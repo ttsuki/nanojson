@@ -802,6 +802,7 @@ namespace nanojson3
     [[nodiscard]] inline bool operator ==(const json::node_reference& lhs, const json::node_reference& rhs) noexcept { return lhs->as_variant() == rhs->as_variant(); }
     [[nodiscard]] inline bool operator !=(const json::node_reference& lhs, const json::node_reference& rhs) noexcept { return lhs->as_variant() != rhs->as_variant(); }
 
+    // input/output
 
     template <class CharInputIterator>
     struct json::json_reader
@@ -1642,27 +1643,31 @@ namespace nanojson3
 
     inline namespace io
     {
+        // json from CharInputIterator pair
         template <class CharInputIterator>
         static json parse_json(CharInputIterator begin, CharInputIterator end, json_parse_option loose = json_parse_option::default_option)
         {
             return json::json_reader<CharInputIterator>::read_json(std::move(begin), std::move(end), loose);
         }
 
+        // json from string_view
         static json parse_json(json::json_string_view sv, json_parse_option loose = json_parse_option::default_option)
         {
             return io::parse_json<json::json_string_view::const_iterator>(sv.begin(), sv.end(), loose);
         }
 
+        // json to string_view
         template <class CharOutputIterator>
-        static void serialize_json(CharOutputIterator begin, const json& value, json_serialize_option option = json_serialize_option::none, json_floating_format_options floating_format = {})
+        static void serialize_json(CharOutputIterator begin, const json& value, json_serialize_option option = json_serialize_option::default_option, json_floating_format_options floating_format = {})
         {
             return json::json_writer<CharOutputIterator>::write_json(std::move(begin), value, option, floating_format);
         }
 
+        // json to container given in template argument
         template <class DestinationContainer = json::json_string>
-        static inline DestinationContainer serialize_json(const json& value, json_serialize_option option = json_serialize_option::none, json_floating_format_options floating_format = {})
+        static inline DestinationContainer serialize_json(const json& value, json_serialize_option option = json_serialize_option::default_option, json_floating_format_options floating_format = {})
         {
-            DestinationContainer string;
+            DestinationContainer string{};
             io::serialize_json<std::back_insert_iterator<DestinationContainer>>(std::back_inserter(string), value, option, floating_format);
             return string;
         }
