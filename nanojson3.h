@@ -739,24 +739,15 @@ namespace nanojson3
         [[nodiscard]] bool is_object() const noexcept { return value().is_object(); }
 
         // returns nullptr if type is mismatch
-        template <json_type_index TypeIndex> [[nodiscard]] const auto* as() const noexcept { return value().as<TypeIndex>(); }
-        [[nodiscard]] const js_null* as_null() const noexcept { return value().as_null(); }
-        [[nodiscard]] const js_boolean* as_boolean() const noexcept { return value().as_boolean(); }
-        [[nodiscard]] const js_integer* as_integer() const noexcept { return value().as_integer(); }
-        [[nodiscard]] const js_floating* as_floating() const noexcept { return value().as_floating(); }
+        template <json_type_index TypeIndex> [[nodiscard]] auto* as() const noexcept { return value().as<TypeIndex>(); }
+        [[nodiscard]] js_null* as_null() const noexcept { return value().as_null(); }
+        [[nodiscard]] js_boolean* as_boolean() const noexcept { return value().as_boolean(); }
+        [[nodiscard]] js_integer* as_integer() const noexcept { return value().as_integer(); }
+        [[nodiscard]] js_floating* as_floating() const noexcept { return value().as_floating(); }
         [[nodiscard]] std::optional<js_number> as_number() const noexcept { return value().as_number(); }
-        [[nodiscard]] const js_string* as_string() const noexcept { return value().as_string(); }
-        [[nodiscard]] const js_array* as_array() const noexcept { return value().as_array(); }
-        [[nodiscard]] const js_object* as_object() const noexcept { return value().as_object(); }
-
-        template <json_type_index TypeIndex> [[nodiscard]] auto* as() noexcept { return value().as<TypeIndex>(); }
-        [[nodiscard]] js_null* as_null() noexcept { return value().as_null(); }
-        [[nodiscard]] js_boolean* as_boolean() noexcept { return value().as_boolean(); }
-        [[nodiscard]] js_integer* as_integer() noexcept { return value().as_integer(); }
-        [[nodiscard]] js_floating* as_floating() noexcept { return value().as_floating(); }
-        [[nodiscard]] js_string* as_string() noexcept { return value().as_string(); }
-        [[nodiscard]] js_array* as_array() noexcept { return value().as_array(); }
-        [[nodiscard]] js_object* as_object() noexcept { return value().as_object(); }
+        [[nodiscard]] js_string* as_string() const noexcept { return value().as_string(); }
+        [[nodiscard]] js_array* as_array() const noexcept { return value().as_array(); }
+        [[nodiscard]] js_object* as_object() const noexcept { return value().as_object(); }
 
         // throws bad_access if type is mismatch
         template <json_type_index TypeIndex> [[nodiscard]] auto get() const { return value().get<TypeIndex>(); }
