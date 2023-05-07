@@ -550,26 +550,6 @@ namespace nanojson3
             }
         };
 
-        using const_json_value_ref = json_value_reference_container<const js_variant&>;
-        using json_value_ref = json_value_reference_container<js_variant&>;
-
-        [[nodiscard]] const_json_value_ref value() const noexcept { return const_json_value_ref{value_}; }
-        [[nodiscard]] const_json_value_ref operator *() const noexcept { return value(); }
-        [[nodiscard]] const_json_value_ref operator ->() const noexcept { return value(); }
-
-        [[nodiscard]] json_value_ref value() noexcept { return json_value_ref{value_}; }
-        [[nodiscard]] json_value_ref operator *() noexcept { return value(); }
-        [[nodiscard]] json_value_ref operator ->() noexcept { return value(); }
-
-    public: // array/object index operators
-        using const_node_reference = const json&;
-        class node_reference;
-
-        [[nodiscard]] const_node_reference operator[](js_array_index_view index) const noexcept;
-        [[nodiscard]] const_node_reference operator[](js_object_key_view key) const noexcept;
-        [[nodiscard]] node_reference operator[](js_array_index_view index) noexcept;
-        [[nodiscard]] node_reference operator[](js_object_key_view key) noexcept;
-
     public: // undefined_reference
         [[nodiscard]] static const json& undefined_reference() noexcept
         {
@@ -577,7 +557,27 @@ namespace nanojson3
             return undefined;
         }
 
-    public: // value access shortcut
+    public: // accessors
+
+        using json_value_ref = json_value_reference_container<js_variant&>;
+        using const_json_value_ref = json_value_reference_container<const js_variant&>;
+
+        class json_reference;
+        using const_json_reference = const json&;
+
+        [[nodiscard]] json_value_ref value() noexcept { return json_value_ref{value_}; }
+        [[nodiscard]] json_value_ref operator *() noexcept { return value(); }
+        [[nodiscard]] json_value_ref operator ->() noexcept { return value(); }
+        [[nodiscard]] json_reference operator [](js_array_index_view index) noexcept; // array[index]
+        [[nodiscard]] json_reference operator [](js_object_key_view key) noexcept;    // object[key]
+
+        [[nodiscard]] const_json_value_ref value() const noexcept { return const_json_value_ref{value_}; }
+        [[nodiscard]] const_json_value_ref operator *() const noexcept { return value(); }
+        [[nodiscard]] const_json_value_ref operator ->() const noexcept { return value(); }
+        [[nodiscard]] const_json_reference operator [](js_array_index_view index) const noexcept; // array[index]
+        [[nodiscard]] const_json_reference operator [](js_object_key_view key) const noexcept;    // object[key]
+
+    public: // value access shortcuts
 
         [[nodiscard]] json_type_index get_type() const noexcept { return value().get_type(); }
         [[nodiscard]] const js_variant& as_variant() const noexcept { return value().as_variant(); }
@@ -637,7 +637,8 @@ namespace nanojson3
         template <class U = js_object, std::enable_if_t<std::is_convertible_v<U, js_object>>* = nullptr> [[nodiscard]] js_object get_object_or(U&& default_value) const { return value().get_object_or(std::forward<U>(default_value)); }
     };
 
-    class json::node_reference final
+    // reference to mutable node
+    class json::json_reference final
     {
     private:
         using undefined_pointer = std::monostate;
@@ -645,84 +646,36 @@ namespace nanojson3
         using array_write_pointer = std::pair<js_array*, js_array::size_type>;
         using object_write_pointer = std::pair<js_object*, js_object::key_type>;
         using pointer = std::variant<undefined_pointer, normal_pointer, array_write_pointer, object_write_pointer>;
-        pointer pointer_{};
-        node_reference(pointer p) : pointer_(std::move(p)) { }
+
+        mutable pointer pointer_{};
+        json_reference(pointer p) : pointer_(std::move(p)) { }
 
     public:
-        node_reference(json& r) : pointer_(std::in_place_type<normal_pointer>, &r) { }
-        node_reference(const node_reference& other) = delete;
-        node_reference(node_reference&& other) noexcept = delete;
-        node_reference& operator=(const node_reference& other) = delete;
-        node_reference& operator=(node_reference&& other) noexcept = delete;
-        ~node_reference() = default;
+        json_reference(json& r) : pointer_(std::in_place_type<normal_pointer>, &r) { }
+        json_reference(const json_reference& other) = delete;
+        json_reference(json_reference&& other) noexcept = delete;
+        json_reference& operator=(const json_reference& other) = delete;
+        json_reference& operator=(json_reference&& other) noexcept = delete;
+        ~json_reference() = default;
+
+        // assign operator (proxy)
+        json& operator =(json value) const;
+
+    public: // accessors
 
         [[nodiscard]] json_value_ref value() const noexcept
         {
-            if (const normal_pointer* p = std::get_if<normal_pointer>(&pointer_)) return (*p)->value();
-            return const_cast<json&>(undefined_reference()).value(); // assumes the value type can't be changed from json_value_t interface.
+            return std::holds_alternative<normal_pointer>(pointer_)
+                       ? std::get<normal_pointer>(pointer_)->value()
+                       : const_cast<json&>(undefined_reference()).value(); // assumes the value type can't be changed from json_value_t interface.
         }
 
         [[nodiscard]] json_value_ref operator *() const noexcept { return value(); }
         [[nodiscard]] json_value_ref operator ->() const noexcept { return value(); }
+        [[nodiscard]] json_reference operator [](js_array_index key) const noexcept;     // array[index]
+        [[nodiscard]] json_reference operator [](js_object_key_view key) const noexcept; // object[key]
 
-        [[nodiscard]] node_reference operator [](js_array_index key) const noexcept
-        {
-            if (const normal_pointer* p = std::get_if<normal_pointer>(&pointer_))
-            {
-                if (const auto a = (*p)->value().as_array())
-                {
-                    if (key < a->size())
-                        return pointer(std::in_place_type<normal_pointer>, &a->operator[](key)); // normal reference
-                    else
-                        return pointer(std::in_place_type<array_write_pointer>, a, key); // write only reference
-                }
-            }
-
-            return pointer{undefined_pointer{}};
-        }
-
-        [[nodiscard]] node_reference operator [](js_object_key_view key) const noexcept
-        {
-            if (const normal_pointer* p = std::get_if<normal_pointer>(&pointer_))
-            {
-                if (const auto o = (*p)->value().as_object())
-                {
-                    if (const auto it = o->find(key); it != o->end())
-                        return pointer(std::in_place_type<normal_pointer>, &it->second); // normal reference
-                    else
-                        return pointer{std::in_place_type<object_write_pointer>, o, js_object::key_type(key)}; // write only reference
-                }
-            }
-
-            return pointer{undefined_pointer{}};
-        }
-
-        // assign operator
-        json& operator =(json value)
-        {
-            if (normal_pointer* pn = std::get_if<normal_pointer>(&pointer_))
-            {
-                return **pn = std::move(value);
-            }
-            else if (array_write_pointer* pa = std::get_if<array_write_pointer>(&pointer_))
-            {
-                auto [a, i] = *pa;
-                if (i >= a->size()) a->resize(i + 1);
-                json& r = a->operator[](i) = std::move(value);
-                pointer_ = normal_pointer{&r}; // update pointer to real instance
-                return r;
-            }
-            else if (object_write_pointer* po = std::get_if<object_write_pointer>(&pointer_))
-            {
-                auto [o, k] = *po;
-                json& r = o->insert_or_assign(std::move(k), std::move(value)).first->second;
-                pointer_ = normal_pointer{&r}; // update pointer to real instance
-                return r;
-            }
-            else throw bad_access(); // can't write to undefined node
-        }
-
-    public: // value access shortcut
+    public: // value access shortcuts
 
         [[nodiscard]] json_type_index get_type() const noexcept { return value().get_type(); }
         [[nodiscard]] const js_variant& as_variant() const noexcept { return value().as_variant(); }
@@ -773,7 +726,76 @@ namespace nanojson3
         template <class U = js_object, std::enable_if_t<std::is_convertible_v<U, js_object>>* = nullptr> [[nodiscard]] js_object get_object_or(U&& default_value) const { return value().get_object_or(std::forward<U>(default_value)); }
     };
 
-    inline json::const_node_reference json::operator[](js_array_index_view index) const noexcept
+    // non-const json::node_reference assign operator
+    inline json& json::json_reference::operator=(json value) const
+    {
+        if (normal_pointer* pn = std::get_if<normal_pointer>(&pointer_))
+        {
+            return **pn = std::move(value);
+        }
+        else if (array_write_pointer* pa = std::get_if<array_write_pointer>(&pointer_))
+        {
+            auto [a, i] = *pa;
+            if (i >= a->size()) a->resize(i + 1);
+            json& r = a->operator[](i) = std::move(value);
+            pointer_ = normal_pointer{&r}; // update pointer to real instance
+            return r;
+        }
+        else if (object_write_pointer* po = std::get_if<object_write_pointer>(&pointer_))
+        {
+            auto [o, k] = *po;
+            json& r = o->insert_or_assign(std::move(k), std::move(value)).first->second;
+            pointer_ = normal_pointer{&r}; // update pointer to real instance
+            return r;
+        }
+        else
+        {
+            throw bad_access(); // can't write to undefined node
+        }
+    }
+
+    // non-const array[index]
+    inline json::json_reference json::json_reference::operator[](js_array_index key) const noexcept
+    {
+        if (const normal_pointer* p = std::get_if<normal_pointer>(&pointer_))
+        {
+            if (const auto a = (*p)->value().as_array())
+            {
+                if (key < a->size())
+                    return pointer(std::in_place_type<normal_pointer>, &a->operator[](key)); // normal reference
+                else
+                    return pointer(std::in_place_type<array_write_pointer>, a, key); // write only reference
+            }
+        }
+
+        return pointer{undefined_pointer{}};
+    }
+
+    // non-const object[key]
+    inline json::json_reference json::json_reference::operator[](js_object_key_view key) const noexcept
+    {
+        if (const normal_pointer* p = std::get_if<normal_pointer>(&pointer_))
+        {
+            if (const auto o = (*p)->value().as_object())
+            {
+                if (const auto it = o->find(key); it != o->end())
+                    return pointer(std::in_place_type<normal_pointer>, &it->second); // normal reference
+                else
+                    return pointer{std::in_place_type<object_write_pointer>, o, js_object::key_type(key)}; // write only reference
+            }
+        }
+
+        return pointer{undefined_pointer{}};
+    }
+
+    // non-const array[index]
+    inline json::json_reference json::operator[](js_array_index_view index) noexcept { return json_reference(*this)[index]; }
+
+    // non-const object[key]
+    inline json::json_reference json::operator[](js_object_key_view key) noexcept { return json_reference(*this)[key]; }
+
+    // const array[index]
+    inline json::const_json_reference json::operator[](js_array_index_view index) const noexcept
     {
         if (const auto a = value().as_array())
             if (index < a->size())
@@ -782,7 +804,8 @@ namespace nanojson3
         return undefined_reference();
     }
 
-    inline json::const_node_reference json::operator[](js_object_key_view key) const noexcept
+    // const object[key]
+    inline json::const_json_reference json::operator[](js_object_key_view key) const noexcept
     {
         if (const auto o = value().as_object())
             if (const auto it = o->find(key); it != o->end())
@@ -791,17 +814,14 @@ namespace nanojson3
         return undefined_reference();
     }
 
-    inline json::node_reference json::operator[](js_array_index_view index) noexcept { return node_reference(*this)[index]; }
-    inline json::node_reference json::operator[](js_object_key_view key) noexcept { return node_reference(*this)[key]; }
-
     [[nodiscard]] inline bool operator ==(const json& lhs, const json& rhs) noexcept { return lhs->as_variant() == rhs->as_variant(); }
     [[nodiscard]] inline bool operator !=(const json& lhs, const json& rhs) noexcept { return lhs->as_variant() != rhs->as_variant(); }
-    [[nodiscard]] inline bool operator ==(const json& lhs, const json::node_reference& rhs) noexcept { return lhs->as_variant() == rhs->as_variant(); }
-    [[nodiscard]] inline bool operator !=(const json& lhs, const json::node_reference& rhs) noexcept { return lhs->as_variant() != rhs->as_variant(); }
-    [[nodiscard]] inline bool operator ==(const json::node_reference& lhs, const json& rhs) noexcept { return lhs->as_variant() == rhs->as_variant(); }
-    [[nodiscard]] inline bool operator !=(const json::node_reference& lhs, const json& rhs) noexcept { return lhs->as_variant() != rhs->as_variant(); }
-    [[nodiscard]] inline bool operator ==(const json::node_reference& lhs, const json::node_reference& rhs) noexcept { return lhs->as_variant() == rhs->as_variant(); }
-    [[nodiscard]] inline bool operator !=(const json::node_reference& lhs, const json::node_reference& rhs) noexcept { return lhs->as_variant() != rhs->as_variant(); }
+    [[nodiscard]] inline bool operator ==(const json& lhs, const json::json_reference& rhs) noexcept { return lhs->as_variant() == rhs->as_variant(); }
+    [[nodiscard]] inline bool operator !=(const json& lhs, const json::json_reference& rhs) noexcept { return lhs->as_variant() != rhs->as_variant(); }
+    [[nodiscard]] inline bool operator ==(const json::json_reference& lhs, const json& rhs) noexcept { return lhs->as_variant() == rhs->as_variant(); }
+    [[nodiscard]] inline bool operator !=(const json::json_reference& lhs, const json& rhs) noexcept { return lhs->as_variant() != rhs->as_variant(); }
+    [[nodiscard]] inline bool operator ==(const json::json_reference& lhs, const json::json_reference& rhs) noexcept { return lhs->as_variant() == rhs->as_variant(); }
+    [[nodiscard]] inline bool operator !=(const json::json_reference& lhs, const json::json_reference& rhs) noexcept { return lhs->as_variant() != rhs->as_variant(); }
 
     // input/output
 
