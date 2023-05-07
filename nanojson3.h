@@ -1791,17 +1791,17 @@ namespace nanojson3
         // type_traits
 
         template <class Container, class = void>
-        struct get_container_value_type {};
+        struct value_type_of_container {};
 
         template <class Container>
-        struct get_container_value_type<Container, std::enable_if_t<std::is_same_v<decltype(std::begin(std::declval<Container>())), decltype(std::end(std::declval<Container>()))>>>
+        struct value_type_of_container<Container, std::enable_if_t<std::is_same_v<decltype(std::begin(std::declval<Container>())), decltype(std::end(std::declval<Container>()))>>>
         {
             using value_reference_type = decltype(*std::begin(std::declval<Container>()));
             using value_type = std::decay_t<value_reference_type>;
         };
 
         template <class Container>
-        using container_value_type_t = typename get_container_value_type<Container>::value_type;
+        using value_type_of_container_t = typename value_type_of_container<Container>::value_type;
     }
 
 
@@ -1820,14 +1820,14 @@ namespace nanojson3
     // map `container<char>` to `js_string`
     template <class CharContainer>
     struct json_serializer<CharContainer, std::enable_if_t<
-                               std::is_same_v<json_serializer_helper::container_value_type_t<CharContainer>, json::char_type>
+                               std::is_same_v<json_serializer_helper::value_type_of_container_t<CharContainer>, json::char_type>
                            >>
         : json_serializer_helper::serialize_via_range_constructor<json::js_string> { };
 
     // map `container<T>` to `js_array` if `T` is json-convertible to .
     template <class Container>
     struct json_serializer<Container, std::enable_if_t<
-                               std::is_convertible_v<json_serializer_helper::container_value_type_t<Container>, json>
+                               std::is_convertible_v<json_serializer_helper::value_type_of_container_t<Container>, json>
                            >>
         : json_serializer_helper::serialize_via_range_constructor<json::js_array> { };
 
@@ -1844,8 +1844,8 @@ namespace nanojson3
     // map `container<[K,V]>` to `js_object` if `K` is js_object_key-convertible and `V` is json-convertible
     template <class Container>
     struct json_serializer<Container, std::enable_if_t<
-                               std::is_convertible_v<decltype(json_serializer_helper::container_value_type_t<Container>::first), json::js_object_key_view> &&
-                               std::is_convertible_v<decltype(json_serializer_helper::container_value_type_t<Container>::second), json>
+                               std::is_convertible_v<decltype(json_serializer_helper::value_type_of_container_t<Container>::first), json::js_object_key_view> &&
+                               std::is_convertible_v<decltype(json_serializer_helper::value_type_of_container_t<Container>::second), json>
                            >>
     {
         template <class T> static json serialize(T&& val)
